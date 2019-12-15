@@ -1,5 +1,5 @@
 [package]
-name = "encypter-server"
+name = "encrypter-server"
 version = "0.1.0"
 authors = ["Nehliin <o-nehlin@hotmail.com>"]
 edition = "2018"

@@ -1,2 +1,2 @@
 [workspace]
-members = ["encrypter-client", "encypter-server", "encrypter-core"]
+members = ["encrypter-client", "encrypter-server", "encrypter-core"]
