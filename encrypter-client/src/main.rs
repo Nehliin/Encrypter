@@ -1,10 +1,5 @@
 use std::io::{self, Write};
 
-use async_std::io::{stdin, BufReader};
-use async_std::net::TcpStream;
-use async_std::prelude::*;
-use async_std::task;
-use futures::FutureExt;
 use termion::cursor::Goto;
 use termion::event::Key;
 use termion::input::MouseTerminal;
@@ -16,10 +11,7 @@ use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, Paragraph, SelectableList, Text, Widget};
 use tui::{Frame, Terminal};
 
-
 use crate::events::{Event, Events};
-use std::env::current_exe;
-use std::sync::atomic::Ordering::AcqRel;
 
 mod events;
 
@@ -284,16 +276,15 @@ fn main() -> Result<()> {
         io::stdout().flush().ok();
 
         // Handle input
-        match events.next()? {
-            Event::Input(input) => match input {
+        if let Event::Input(input) = events.next()? {
+            match input {
                 Key::Ctrl('c') => {
                     break;
                 }
                 _ => {
                     handle_block_events(input, &mut app);
                 }
-            },
-            _ => {}
+            }
         }
     }
 
@@ -341,27 +332,22 @@ fn handle_block_events(input: Key, app: &mut App) {
 
 fn handle_right_event(app: &mut App) {
     let current_route = app.get_current_route();
-    match current_route.hovered_block {
-        ActiveBlock::ChatList => app.set_current_route_state(None, Some(ActiveBlock::ChatWindow)),
-        _ => {}
+    if let ActiveBlock::ChatList = current_route.hovered_block {
+        app.set_current_route_state(None, Some(ActiveBlock::ChatWindow));
     }
 }
 
 fn handle_left_event(app: &mut App) {
     let current_route = app.get_current_route();
-    match current_route.hovered_block {
-        ActiveBlock::ChatWindow => app.set_current_route_state(None, Some(ActiveBlock::ChatList)),
-        _ => {}
+    if let ActiveBlock::ChatWindow = current_route.hovered_block {
+        app.set_current_route_state(None, Some(ActiveBlock::ChatList));
     }
 }
 
 // ha mer generell struktur
 fn chat_list_handler(input: Key, app: &mut App) {
-    match input {
-        Key::Right => {
-            app.set_current_route_state(Some(ActiveBlock::Empty), Some(ActiveBlock::ChatWindow));
-        }
-        _ => {}
+    if let Key::Right = input {
+        app.set_current_route_state(Some(ActiveBlock::Empty), Some(ActiveBlock::ChatWindow));
     }
 }
 
@@ -428,20 +414,4 @@ fn server_handler(input: Key, app: &mut App) {
         _ => {}
     }
     app.input_cursor_pos = app.server_addr.len() as u16;
-}
-
-async fn start_async() -> Result<()> {
-    /*let server_addr = matches.value_of("encrypter-server-connection").unwrap_or("127.0.0.1:1337");
-    let id = matches.value_of("id").unwrap_or("anon");
-    let stream = TcpStream::connect(server_addr).await?;
-    let (reader, mut writer) = (&stream, &stream);
-    let hello_msg = IncomingPeer { id: id.into() };
-    writer.write_all(&bincode::serialize(&hello_msg).unwrap()).await?;
-    println!("reader {:?}", reader);
-    // skicka runt channels istället för stream delarna
-    task::spawn(handle_incomming_messages(sender));
-
-    let stdin = BufReader::new(stdin());
-    let mut lines_from_stdin = futures::StreamExt::fuse(stdin.lines());*/
-    Ok(())
 }

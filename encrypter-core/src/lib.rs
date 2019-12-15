@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize)]
-pub enum Protocol {
-    From(String),
-    To(String),
-    Message(String),
+#[derive(Deserialize, Serialize, Debug)]
+pub struct Protocol {
+    pub from: String,
+    pub to: String,
+    pub message: String,
 }
