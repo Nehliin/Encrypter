@@ -1,0 +1,9 @@
+[package]
+name = "encrypter-core"
+version = "0.1.0"
+authors = ["Nehliin <o-nehlin@hotmail.com>"]
+edition = "2018"
+
+[dependencies]
+bincode = "1.2.1"
+serde = { version = "1.0", features = ["derive"] }
