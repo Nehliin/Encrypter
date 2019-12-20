@@ -1,9 +1,12 @@
 use crate::{connect_to_server, ActiveBlock, App, Route, RouteId};
-use async_std::task;
+
 use encrypter_core::Protocol;
 use futures::{channel::mpsc, SinkExt};
-use std::sync::{Arc, Mutex};
+
 use termion::event::Key;
+
+pub type Sender<T> = mpsc::UnboundedSender<T>;
+pub type Receiver<T> = mpsc::UnboundedReceiver<T>;
 /*
 Input struktur:
 1. kolla universiella kommandon (görs i main nu)
@@ -74,18 +77,16 @@ pub fn chat_window_handler(input: Key, app: &mut App) {
         Key::Char('\n') => {
             app.messages.push(app.message_draft.drain(..).collect());
             // incredibly stupid, io should be async as well...
-            task::block_on(async {
-                app.outgoing_traffic_sender
-                    .as_ref()
-                    .unwrap() // kör map här istället
-                    .send(Protocol {
-                        from: app.id.clone(),
-                        to: "kalle".into(),
-                        message: app.messages.last().unwrap().to_owned(),
-                    })
-                    .await
-                    .unwrap();
-            });
+
+            app.outgoing_traffic_sender
+                .as_ref()
+                .unwrap() // kör map här istället
+                .send(Protocol {
+                    from: app.id.clone(),
+                    to: "pung".into(),
+                    message: app.messages.last().unwrap().to_owned(),
+                })
+                .unwrap();
             // send message
         }
         Key::Char(c) => {
@@ -122,21 +123,9 @@ pub fn id_handler(input: Key, app: &mut App) {
 pub fn server_handler(input: Key, app: &mut App) {
     match input {
         Key::Char('\n') => {
-            let (incoming_traffic_sender, incoming_traffic_receiver) = mpsc::unbounded();
-            let (outgoing_traffic_sender, outgoing_traffic_receiver) = mpsc::unbounded();
-            app.outgoing_traffic_sender = Some(outgoing_traffic_sender);
-            app.incoming_traffic_receiver = Some(Arc::new(Mutex::new(incoming_traffic_receiver)));
-            task::block_on(async {
-                if let Err(err) = connect_to_server(
-                    &*app.server_addr.clone(),
-                    incoming_traffic_sender,
-                    outgoing_traffic_receiver,
-                )
-                .await
-                {
-                    eprintln!("Couldn't connect to server {:#?}", err);
-                }
-            });
+            if let Err(err) = connect_to_server(app) {
+                eprintln!("Couldn't connect to server {:#?}", err);
+            }
             app.push_route(Route {
                 id: RouteId::Chat,
                 hovered_block: ActiveBlock::ChatList,

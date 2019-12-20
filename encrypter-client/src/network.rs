@@ -1,26 +1,21 @@
-use futures::{channel::mpsc, select, FutureExt, SinkExt, StreamExt};
-
-use async_std::{
-    io::{BufReader, Write},
+use crate::App;
+use crossbeam::channel::select;
+use crossbeam::channel::{unbounded, Receiver, Sender};
+use std::{
+    io::{BufRead, BufReader, Write},
     net::TcpStream,
-    prelude::*,
-    task,
 };
 
-use encrypter_core::{Protocol, Receiver, Result, Sender};
+use encrypter_core::{Protocol, Result};
 
-pub async fn connect_to_server(
-    server_addr: &str,
-    incoming_traffic_sender: Sender<Protocol>,
-    outgoing_traffic_receiver: Receiver<Protocol>,
-) -> Result<()> {
-    let stream = TcpStream::connect(server_addr).await?;
-
-    task::spawn(async move {
-        if let Err(err) =
-            communicate_with_server(stream, outgoing_traffic_receiver, incoming_traffic_sender)
-                .await
-        {
+pub fn connect_to_server(app: &mut App) -> Result<()> {
+    let stream = TcpStream::connect(&app.server_addr)?;
+    let (incoming_sender, incoming_receiver) = unbounded();
+    let (outgoing_sender, outgoing_receiver) = unbounded();
+    app.outgoing_traffic_sender = Some(outgoing_sender.clone());
+    app.incoming_traffic_receiver = Some(incoming_receiver.clone());
+    app.net_thread_scope.spawn(move |_| {
+        if let Err(err) = communicate_with_server(stream, outgoing_receiver, incoming_sender) {
             eprintln!(
                 "Something went wrong when communicating with server {:#?}",
                 err
@@ -30,34 +25,25 @@ pub async fn connect_to_server(
     Ok(())
 }
 
-async fn communicate_with_server(
+fn communicate_with_server(
     stream: TcpStream,
     outgoing_traffic_receiver: Receiver<Protocol>,
-    mut incoming_traffic_sender: Sender<Protocol>,
+    incoming_traffic_sender: Sender<Protocol>,
 ) -> Result<()> {
     let (reader, mut writer) = (&stream, &stream);
-    let reader = BufReader::new(reader);
-    let mut msg_from_server = StreamExt::fuse(reader.lines());
-    let mut outgoing_traffic_receiver = StreamExt::fuse(outgoing_traffic_receiver);
     loop {
-        select! {
-            // if something should be sent to the server
-            msg = outgoing_traffic_receiver.next().fuse() => match msg {
-                Some(msg) => {
-                    writer.write_all(&bincode::serialize(&msg)?).await?;
-                }
-                None => break,
-            },
-            // if a message have been received from the server
-            msg = msg_from_server.next().fuse() => match msg {
-                Some(msg) => {
-                    let message = bincode::deserialize::<Protocol>(&msg?.as_bytes())?;
-                    println!("Message from server {:#?}", message);
-                    incoming_traffic_sender.send(message).await?;
-                },
-                None => break,
-            }
+        let reader = BufReader::new(reader);
+        for msg in reader.lines() {
+            let message = bincode::deserialize::<Protocol>(&msg?.as_bytes())?;
+            println!("Message from server {:#?}", message);
+            incoming_traffic_sender.send(message)?;
         }
+        while let Ok(msg) =
+            outgoing_traffic_receiver.recv_timeout(std::time::Duration::from_millis(1000))
+        {
+            writer.write_all(&bincode::serialize(&msg)?)?;
+        }
+        // if something should be sent to the server
     }
     Ok(())
 }

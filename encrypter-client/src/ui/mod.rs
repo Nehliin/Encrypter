@@ -1,7 +1,5 @@
 use crate::{ActiveBlock, App, RouteId};
-use async_std::task;
 use futures::StreamExt;
-use std::sync::{Arc, Mutex};
 
 use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
@@ -36,7 +34,7 @@ where
     };
 }
 
-pub fn draw_chat_window<B>(frame: &mut Frame<B>, app: &App, layout_chunk: Rect)
+pub fn draw_chat_window<B>(frame: &mut Frame<B>, app: &mut App, layout_chunk: Rect)
 where
     B: Backend,
 {
@@ -50,18 +48,18 @@ where
         .margin(2)
         .constraints([Constraint::Percentage(90), Constraint::Min(3)].as_ref())
         .split(layout_chunk);
-    let incoming_traffic_receiver = app.incoming_traffic_receiver.clone();
-    let messages = Arc::new(Mutex::new(Vec::new()));
-    task::block_on(async {
-        let rc = incoming_traffic_receiver.unwrap();
-        let mut messages = messages.lock().unwrap();
-        let mut rc = rc.lock().unwrap();
-        while let Some(msg) = rc.next().await {
-            messages.push(format!("{}: {}", msg.from, msg.message).to_string());
-        }
-    });
-    let messages = messages.lock().unwrap().clone();
-    let messages = messages.iter().map(Text::raw);
+
+    while let Ok(msg) = app
+        .incoming_traffic_receiver
+        .as_ref()
+        .unwrap()
+        .recv_timeout(std::time::Duration::from_millis(100))
+    {
+        app.messages
+            .push(format!("{}: {}", msg.from, msg.message).to_string());
+    }
+
+    let messages = app.messages.iter().map(Text::raw);
     List::new(messages)
         .block(
             Block::default()

@@ -8,10 +8,9 @@ use async_std::{
     task,
 };
 use encrypter_core::Protocol;
-
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-type Sender<T> = mpsc::UnboundedSender<T>;
+use encrypter_core::Result;
 type Receiver<T> = mpsc::UnboundedReceiver<T>;
+type Sender<T> = mpsc::UnboundedSender<T>;
 
 struct NetEvent {
     pub message: Protocol,
@@ -72,9 +71,9 @@ async fn listen_to_traffic(mut sender: Sender<NetEvent>, stream: TcpStream) -> R
     let stream = Arc::new(stream);
     let reader = BufReader::new(&*stream);
     // unclear if this is the best way
-    let mut lines = reader.lines();
+    let mut lines_from_client = futures::StreamExt::fuse(reader.lines());
 
-    while let Some(msg) = lines.next().await {
+    while let Some(msg) = lines_from_client.next().fuse().await {
         let message = msg?;
         let message = bincode::deserialize::<Protocol>(message.as_bytes())?;
         println!("Message received: {:#?}", message);
