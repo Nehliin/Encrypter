@@ -5,8 +5,6 @@ use futures::{channel::mpsc, SinkExt};
 
 use termion::event::Key;
 
-pub type Sender<T> = mpsc::UnboundedSender<T>;
-pub type Receiver<T> = mpsc::UnboundedReceiver<T>;
 /*
 Input struktur:
 1. kolla universiella kommandon (görs i main nu)
@@ -77,17 +75,11 @@ pub fn chat_window_handler(input: Key, app: &mut App) {
         Key::Char('\n') => {
             app.messages.push(app.message_draft.drain(..).collect());
             // incredibly stupid, io should be async as well...
-
-            app.outgoing_traffic_sender
-                .as_ref()
-                .unwrap() // kör map här istället
-                .send(Protocol {
-                    from: app.id.clone(),
-                    to: "pung".into(),
-                    message: app.messages.last().unwrap().to_owned(),
-                })
-                .unwrap();
-            // send message
+            app.communicator.unwrap().send(Protocol {
+                from: app.id.clone(),
+                to: "pung".into(),
+                message: app.messages.last().unwrap().to_owned(),
+            });
         }
         Key::Char(c) => {
             app.message_draft.push(c);

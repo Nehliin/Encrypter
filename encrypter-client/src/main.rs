@@ -1,13 +1,13 @@
 use crate::events::{Event, Events};
 use crossbeam::channel::{Receiver, Sender};
+use encrypter_core::{Protocol, Result};
+use network::connect_to_server;
+use std::thread::JoinHandle;
 use termion::cursor::Goto;
 use termion::event::Key;
 use termion::input::MouseTerminal;
 use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
-
-use encrypter_core::{Protocol, Result};
-use network::connect_to_server;
 use tui::backend::TermionBackend;
 use tui::Terminal;
 mod events;
@@ -21,7 +21,7 @@ const DEFAULT_ROUTE: Route = Route {
 };
 
 #[derive(Debug)]
-pub struct App<'a> {
+pub struct App {
     id: String,
     server_addr: String,
     messages: Vec<String>,
@@ -30,21 +30,19 @@ pub struct App<'a> {
     cursor_vertical_offset: u16,
     cursor_horizontal_offset: u16,
     message_draft: String,
-    incoming_traffic_receiver: Option<Receiver<Protocol>>,
-    outgoing_traffic_sender: Option<Sender<Protocol>>,
-    net_thread_scope: &'a crossbeam::thread::Scope<'static>,
+    communicator: Option<network::Communticator>,
+    net_thread_scope: Option<JoinHandle<Result<()>>>,
 }
 
-impl<'a> App<'a> {
-    fn new(scope: &'a crossbeam::thread::Scope<'static>) -> Self {
+impl App {
+    fn new() -> Self {
         App {
             navigation_stack: vec![DEFAULT_ROUTE],
             cursor_vertical_offset: 4,
             cursor_horizontal_offset: 4,
-            net_thread_scope: scope,
+            net_thread_scope: None,
             id: String::new(),
-            incoming_traffic_receiver: None,
-            outgoing_traffic_sender: None,
+            communicator: None,
             message_draft: String::new(),
             messages: Vec::new(),
             input_cursor_pos: 0,
@@ -113,52 +111,50 @@ fn main() -> Result<()> {
 
     // Setup event handlers
     let events = Events::new();
-    crossbeam::thread::scope(move |scope| {
-        // Create default app state
-        let mut app = App::new(&scope);
-        loop {
-            // let current_route = .clone();
-            terminal
-                .draw(|mut f| match app.get_current_route().id {
-                    RouteId::StartScreen => {
-                        ui::draw_start_screen(&mut f, &app);
-                    }
-                    RouteId::Chat => {
-                        ui::draw_routes(&mut f, &mut app);
-                    }
-                })
-                .unwrap();
 
-            if app.get_current_route().id == RouteId::StartScreen {
-                terminal.show_cursor().unwrap();
-            } else {
-                terminal.hide_cursor().unwrap();
-            }
-            use std::io::Write;
-            // Put the cursor back inside the input box
-            write!(
-                terminal.backend_mut(),
-                "{}",
-                Goto(4 + app.input_cursor_pos, app.cursor_vertical_offset)
-            )
+    // Create default app state
+    let mut app = App::new();
+    loop {
+        // let current_route = .clone();
+        terminal
+            .draw(|mut f| match app.get_current_route().id {
+                RouteId::StartScreen => {
+                    ui::draw_start_screen(&mut f, &app);
+                }
+                RouteId::Chat => {
+                    ui::draw_routes(&mut f, &mut app);
+                }
+            })
             .unwrap();
-            // stdout is buffered, flush it to see the effect immediately when hitting backspace
-            std::io::stdout().flush().ok();
 
-            // Handle input
-            if let Event::Input(input) = events.next().unwrap() {
-                match input {
-                    Key::Ctrl('c') => {
-                        break;
-                    }
-                    _ => {
-                        events::handlers::handle_block_events(input, &mut app);
-                    }
+        if app.get_current_route().id == RouteId::StartScreen {
+            terminal.show_cursor().unwrap();
+        } else {
+            terminal.hide_cursor().unwrap();
+        }
+        use std::io::Write;
+        // Put the cursor back inside the input box
+        write!(
+            terminal.backend_mut(),
+            "{}",
+            Goto(4 + app.input_cursor_pos, app.cursor_vertical_offset)
+        )
+        .unwrap();
+        // stdout is buffered, flush it to see the effect immediately when hitting backspace
+        std::io::stdout().flush().ok();
+
+        // Handle input
+        if let Event::Input(input) = events.next().unwrap() {
+            match input {
+                Key::Ctrl('c') => {
+                    break;
+                }
+                _ => {
+                    events::handlers::handle_block_events(input, &mut app);
                 }
             }
         }
-    })
-    .unwrap();
-
+    }
+    //app.net_thread_scope.unwrap();
     Ok(())
 }
