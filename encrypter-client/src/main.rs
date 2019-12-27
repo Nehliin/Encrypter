@@ -1,8 +1,5 @@
 use crate::events::{Event, Events};
-use crossbeam::channel::{Receiver, Sender};
-use encrypter_core::{Protocol, Result};
-use network::connect_to_server;
-use std::thread::JoinHandle;
+use encrypter_core::Result;
 use termion::cursor::Goto;
 use termion::event::Key;
 use termion::input::MouseTerminal;
@@ -30,8 +27,7 @@ pub struct App {
     cursor_vertical_offset: u16,
     cursor_horizontal_offset: u16,
     message_draft: String,
-    communicator: Option<network::Communticator>,
-    net_thread_scope: Option<JoinHandle<Result<()>>>,
+    connection: Option<network::ServerConnection>,
 }
 
 impl App {
@@ -40,9 +36,8 @@ impl App {
             navigation_stack: vec![DEFAULT_ROUTE],
             cursor_vertical_offset: 4,
             cursor_horizontal_offset: 4,
-            net_thread_scope: None,
             id: String::new(),
-            communicator: None,
+            connection: None,
             message_draft: String::new(),
             messages: Vec::new(),
             input_cursor_pos: 0,
@@ -101,7 +96,7 @@ pub struct Route {
     pub active_block: ActiveBlock,
     pub hovered_block: ActiveBlock,
 }
-
+use std::io::Write;
 fn main() -> Result<()> {
     let stdout = std::io::stdout().into_raw_mode()?;
     let stdout = MouseTerminal::from(stdout);
@@ -112,10 +107,13 @@ fn main() -> Result<()> {
     // Setup event handlers
     let events = Events::new();
 
-    // Create default app state
     let mut app = App::new();
     loop {
-        // let current_route = .clone();
+        if let Some(ref mut connection) = app.connection {
+            if let Some(incoming) = connection.step()? {
+                app.messages.push(incoming);
+            }
+        }
         terminal
             .draw(|mut f| match app.get_current_route().id {
                 RouteId::StartScreen => {
@@ -132,7 +130,6 @@ fn main() -> Result<()> {
         } else {
             terminal.hide_cursor().unwrap();
         }
-        use std::io::Write;
         // Put the cursor back inside the input box
         write!(
             terminal.backend_mut(),

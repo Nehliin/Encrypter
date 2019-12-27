@@ -1,7 +1,7 @@
-use crate::{connect_to_server, ActiveBlock, App, Route, RouteId};
+use crate::{network::ServerConnection, ActiveBlock, App, Route, RouteId};
 
 use encrypter_core::Protocol;
-use futures::{channel::mpsc, SinkExt};
+//use futures::{channel::mpsc, SinkExt};
 
 use termion::event::Key;
 
@@ -74,12 +74,15 @@ pub fn chat_window_handler(input: Key, app: &mut App) {
         }
         Key::Char('\n') => {
             app.messages.push(app.message_draft.drain(..).collect());
-            // incredibly stupid, io should be async as well...
-            app.communicator.unwrap().send(Protocol {
-                from: app.id.clone(),
-                to: "pung".into(),
-                message: app.messages.last().unwrap().to_owned(),
-            });
+            app.connection
+                .as_ref()
+                .unwrap()
+                .send(Protocol {
+                    from: app.id.clone(),
+                    to: "other".into(),
+                    message: app.messages.last().unwrap().to_owned(),
+                })
+                .expect("Failed to send message");
         }
         Key::Char(c) => {
             app.message_draft.push(c);
@@ -115,8 +118,13 @@ pub fn id_handler(input: Key, app: &mut App) {
 pub fn server_handler(input: Key, app: &mut App) {
     match input {
         Key::Char('\n') => {
-            if let Err(err) = connect_to_server(app) {
-                eprintln!("Couldn't connect to server {:#?}", err);
+            match ServerConnection::new(&app.server_addr) {
+                Ok(connection) => {
+                    app.connection = Some(connection);
+                }
+                Err(err) => {
+                    eprintln!("Couldn't connect to server {:#?}", err);
+                }
             }
             app.push_route(Route {
                 id: RouteId::Chat,

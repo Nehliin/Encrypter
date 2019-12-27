@@ -1,5 +1,4 @@
 use crate::{ActiveBlock, App, RouteId};
-use futures::StreamExt;
 
 use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
@@ -49,18 +48,6 @@ where
         .constraints([Constraint::Percentage(90), Constraint::Min(3)].as_ref())
         .split(layout_chunk);
 
-    /* while let Ok(msg) = app
-        .incoming_traffic_receiver
-        .as_ref()
-        .unwrap()
-        .recv_timeout(std::time::Duration::from_millis(100))
-    {
-        app.messages
-            .push(format!("{}: {}", msg.from, msg.message).to_string());
-    }
-    */
-    app.messages
-        .append(&mut app.communicator.unwrap().receive());
     let messages = app.messages.iter().map(Text::raw);
     List::new(messages)
         .block(
