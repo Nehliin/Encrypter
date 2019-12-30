@@ -3,12 +3,14 @@ use std::{collections::hash_map::HashMap, sync::Arc};
 
 use async_std::{
     io::BufReader,
+    io::ReadExt,
     net::{TcpListener, TcpStream},
     prelude::*,
     task,
 };
 use encrypter_core::Protocol;
 use encrypter_core::Result;
+use encrypter_core::MESSAGE_PACKET_SIZE;
 type Receiver<T> = mpsc::UnboundedReceiver<T>;
 type Sender<T> = mpsc::UnboundedSender<T>;
 
@@ -69,20 +71,27 @@ async fn listen_to_traffic(mut sender: Sender<NetEvent>, stream: TcpStream) -> R
     // Wrap the connection stream in Arc to be able to send it between tasks
     // This listens on incoming traffic but it's also needed when sending out messages
     let stream = Arc::new(stream);
-    let reader = BufReader::new(&*stream);
-    // unclear if this is the best way
-    let mut lines_from_client = futures::StreamExt::fuse(reader.lines());
-
-    while let Some(msg) = lines_from_client.next().fuse().await {
-        let message = msg?;
-        let message = bincode::deserialize::<Protocol>(message.as_bytes())?;
-        println!("Message received: {:#?}", message);
-        sender
-            .send(NetEvent {
-                message,
-                stream: stream.clone(),
-            })
-            .await?;
+    let mut reader = BufReader::new(&*stream);
+    let mut buffer = vec![0 as u8; MESSAGE_PACKET_SIZE];
+    loop {
+        if let Ok(n) = reader.read(&mut buffer).await {
+            match bincode::deserialize::<Protocol>(&buffer[..n]) {
+                Ok(message) => {
+                    println!("Message received: {:#?}", message);
+                    sender
+                        .send(NetEvent {
+                            message,
+                            stream: stream.clone(),
+                        })
+                        .await
+                        .unwrap_or_else(|err| {
+                            println!("Couldn't send message over channel {}", err)
+                        });
+                }
+                Err(err) => {
+                    println!("Could not parse message from incomming traffic {}", err);
+                }
+            }
+        }
     }
-    Ok(())
 }

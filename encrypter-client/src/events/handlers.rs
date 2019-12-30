@@ -1,7 +1,6 @@
 use crate::{network::ServerConnection, ActiveBlock, App, Route, RouteId};
 
 use encrypter_core::Protocol;
-//use futures::{channel::mpsc, SinkExt};
 
 use termion::event::Key;
 
@@ -17,9 +16,9 @@ pub fn handle_block_events(input: Key, app: &mut App) {
         ActiveBlock::Id => {
             id_handler(input, app);
         }
-        ActiveBlock::ServerAddr => {
+        /* ActiveBlock::ServerAddr => {
             server_handler(input, app);
-        }
+        }*/
         ActiveBlock::ChatList => {
             chat_list_handler(input, app);
         }
@@ -60,8 +59,22 @@ pub fn handle_left_event(app: &mut App) {
 
 // ha mer generell struktur
 pub fn chat_list_handler(input: Key, app: &mut App) {
-    if let Key::Right = input {
-        app.set_current_route_state(Some(ActiveBlock::Empty), Some(ActiveBlock::ChatWindow));
+    match input {
+        Key::Right => {
+            app.set_current_route_state(Some(ActiveBlock::Empty), Some(ActiveBlock::ChatWindow));
+        }
+        Key::Up => {
+            if app.current_chat_index > 0 {
+                app.current_chat_index -= 1;
+            }
+        }
+        Key::Down => {
+            if app.current_chat_index < app.chats.len() - 1 {
+                app.current_chat_index += 1;
+            }
+        }
+        Key::Char('\n') => {}
+        _ => {}
     }
 }
 
@@ -73,19 +86,23 @@ pub fn chat_window_handler(input: Key, app: &mut App) {
             app.set_current_route_state(Some(ActiveBlock::Empty), Some(ActiveBlock::ChatList));
         }
         Key::Char('\n') => {
-            app.messages.push(app.message_draft.drain(..).collect());
+            let message = app.message_draft.drain(..).collect::<String>();
+            let current_chat = app.get_current_chat();
+            current_chat.push(format!("Me: {}", message.clone()));
             app.connection
                 .as_ref()
                 .unwrap()
                 .send(Protocol {
                     from: app.id.clone(),
-                    to: "other".into(),
-                    message: app.messages.last().unwrap().to_owned(),
+                    to: app.chats[app.current_chat_index].0.clone(),
+                    message,
                 })
                 .expect("Failed to send message");
         }
         Key::Char(c) => {
-            app.message_draft.push(c);
+            if app.message_draft.len() < encrypter_core::MESSAGE_MAX_SIZE {
+                app.message_draft.push(c);
+            }
         }
         Key::Backspace => {
             app.message_draft.pop();
@@ -95,27 +112,6 @@ pub fn chat_window_handler(input: Key, app: &mut App) {
 }
 
 pub fn id_handler(input: Key, app: &mut App) {
-    match input {
-        Key::Char('\n') => {
-            app.messages.push(app.id.clone());
-            app.set_current_route_state(
-                Some(ActiveBlock::ServerAddr),
-                Some(ActiveBlock::ServerAddr),
-            );
-            app.cursor_vertical_offset = 7;
-        }
-        Key::Char(c) => {
-            app.id.push(c);
-        }
-        Key::Backspace => {
-            app.id.pop();
-        }
-        _ => {}
-    }
-    app.input_cursor_pos = app.id.len() as u16;
-}
-
-pub fn server_handler(input: Key, app: &mut App) {
     match input {
         Key::Char('\n') => {
             match ServerConnection::new(&app.server_addr) {
@@ -131,16 +127,16 @@ pub fn server_handler(input: Key, app: &mut App) {
                 hovered_block: ActiveBlock::ChatList,
                 active_block: ActiveBlock::ChatList,
             });
-            //app.cursor_horizontal_offset = 6;
-            //app.cursor_vertical_offset = 50;
         }
         Key::Char(c) => {
-            app.server_addr.push(c);
+            if app.id.len() < encrypter_core::ID_MAX_SIZE {
+                app.id.push(c);
+            }
         }
         Key::Backspace => {
-            app.server_addr.pop();
+            app.id.pop();
         }
         _ => {}
     }
-    app.input_cursor_pos = app.server_addr.len() as u16;
+    app.input_cursor_pos = app.id.len() as u16;
 }

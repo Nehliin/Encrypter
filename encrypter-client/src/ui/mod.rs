@@ -48,7 +48,7 @@ where
         .constraints([Constraint::Percentage(90), Constraint::Min(3)].as_ref())
         .split(layout_chunk);
 
-    let messages = app.messages.iter().map(Text::raw);
+    let messages = app.get_current_chat().iter().map(Text::raw);
     List::new(messages)
         .block(
             Block::default()
@@ -78,7 +78,11 @@ where
         current_route.active_block == ActiveBlock::ChatList,
         current_route.hovered_block == ActiveBlock::ChatList,
     );
-
+    let contacts = app
+        .chats
+        .iter()
+        .map(|(user, _)| user)
+        .collect::<Vec<&String>>();
     SelectableList::default()
         .block(
             Block::default()
@@ -87,10 +91,10 @@ where
                 .title_style(get_color(highlight_state))
                 .border_style(get_color(highlight_state)),
         )
-        .items(vec!["Kalle kule", "Bertil Hulgesson", "Hubert Snubert", "Aleks"].as_slice())
+        .items(contacts.as_slice())
         .style(Style::default().fg(Color::White))
-        .select(Some(0))
-        .highlight_style(get_color(highlight_state).modifier(Modifier::BOLD))
+        .select(Some(app.current_chat_index))
+        .highlight_style(get_color(highlight_state).modifier(Modifier::REVERSED))
         .render(frame, layout_chunk);
 }
 
@@ -103,10 +107,10 @@ where
         current_route.active_block == ActiveBlock::Id,
         current_route.hovered_block == ActiveBlock::Id,
     );
-    let highlight_server_state = (
+    /*  let highlight_server_state = (
         current_route.active_block == ActiveBlock::ServerAddr,
         current_route.hovered_block == ActiveBlock::ServerAddr,
-    );
+    );*/
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -130,13 +134,13 @@ where
                 .title("Id"),
         )
         .render(frame, chunks[0]);
-    Paragraph::new([Text::raw(&app.server_addr)].iter())
-        .block(
-            Block::default()
-                .title_style(get_color(highlight_server_state))
-                .border_style(get_color(highlight_server_state))
-                .borders(Borders::ALL)
-                .title("Server addr"),
-        )
-        .render(frame, chunks[1]);
+    /*Paragraph::new([Text::raw(&app.server_addr)].iter())
+    .block(
+        Block::default()
+            .title_style(get_color(highlight_server_state))
+            .border_style(get_color(highlight_server_state))
+            .borders(Borders::ALL)
+            .title("Server addr"),
+    )
+    .render(frame, chunks[1]);*/
 }

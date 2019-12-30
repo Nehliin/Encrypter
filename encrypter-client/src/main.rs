@@ -7,6 +7,7 @@ use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
 use tui::backend::TermionBackend;
 use tui::Terminal;
+
 mod events;
 mod network;
 mod ui;
@@ -21,7 +22,8 @@ const DEFAULT_ROUTE: Route = Route {
 pub struct App {
     id: String,
     server_addr: String,
-    messages: Vec<String>,
+    current_chat_index: usize,
+    chats: Vec<(String, Vec<String>)>,
     navigation_stack: Vec<Route>,
     input_cursor_pos: u16,
     cursor_vertical_offset: u16,
@@ -32,16 +34,25 @@ pub struct App {
 
 impl App {
     fn new() -> Self {
+        let chats: Vec<(String, Vec<String>)> = vec![
+            ("Kalle kule".into(), Vec::new()),
+            ("Bertil Hulgesson".into(), Vec::new()),
+            ("Hubert Snubert".into(), Vec::new()),
+            ("Aleks".into(), Vec::new()),
+        ]
+        .into_iter()
+        .collect();
         App {
             navigation_stack: vec![DEFAULT_ROUTE],
             cursor_vertical_offset: 4,
             cursor_horizontal_offset: 4,
             id: String::new(),
             connection: None,
+            current_chat_index: 0,
             message_draft: String::new(),
-            messages: Vec::new(),
+            chats,
             input_cursor_pos: 0,
-            server_addr: String::new(),
+            server_addr: String::from("127.0.0.1:1337"),
         }
     }
 
@@ -50,6 +61,19 @@ impl App {
             Some(route) => route,
             None => &DEFAULT_ROUTE,
         }
+    }
+
+    pub fn get_current_chat(&mut self) -> &mut Vec<String> {
+        &mut self.chats[self.current_chat_index].1
+    }
+
+    pub fn get_chat_for(&mut self, contact: &str) -> Option<&mut Vec<String>> {
+        for (user, chat) in self.chats.iter_mut() {
+            if contact == user {
+                return Some(chat);
+            }
+        }
+        None
     }
 
     fn get_current_route_mut(&mut self) -> &mut Route {
@@ -85,7 +109,6 @@ pub enum RouteId {
 pub enum ActiveBlock {
     Empty,
     Id,
-    ServerAddr,
     ChatWindow,
     ChatList,
 }
@@ -111,7 +134,9 @@ fn main() -> Result<()> {
     loop {
         if let Some(ref mut connection) = app.connection {
             if let Some(incoming) = connection.step()? {
-                app.messages.push(incoming);
+                if let Some(messages) = app.get_chat_for(&incoming.from) {
+                    messages.push(format!("{}: {}", incoming.from, incoming.message));
+                }
             }
         }
         terminal

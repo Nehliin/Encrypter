@@ -1,5 +1,5 @@
 use crossbeam_channel::{unbounded, Receiver, Sender};
-use encrypter_core::{Protocol, Result};
+use encrypter_core::{Protocol, Result, MESSAGE_PACKET_SIZE};
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::net::ToSocketAddrs;
@@ -51,17 +51,14 @@ impl ServerConnection {
         Ok(())
     }
 
-    pub fn step(&mut self) -> Result<Option<String>> {
+    pub fn step(&mut self) -> Result<Option<Protocol>> {
         if let Ok(outgoing) = self.outgoing_receiver.try_recv() {
             let message = &mut bincode::serialize(&outgoing)?;
-            message.extend_from_slice("\n".as_bytes());
+            debug_assert!(message.len() <= MESSAGE_PACKET_SIZE);
             self.stream.write_all(&message)?;
         }
         if let Ok(msg_from_server) = self.incoming_receiver.try_recv() {
-            return Ok(Some(format!(
-                "{}: {}",
-                msg_from_server.from, msg_from_server.message
-            )));
+            return Ok(Some(msg_from_server));
         }
         Ok(None)
     }
