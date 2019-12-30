@@ -1,5 +1,10 @@
 use serde::{Deserialize, Serialize};
 
+pub const ID_MAX_SIZE: usize = 32 - std::mem::size_of::<String>();
+pub const MESSAGE_MAX_SIZE: usize = 256 - std::mem::size_of::<String>();
+pub const MESSAGE_PACKET_SIZE: usize = 32 + 32 + 256;
+
+pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Protocol {
     pub from: String,

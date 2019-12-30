@@ -6,6 +6,7 @@ use std::time::Duration;
 use termion::event::Key;
 use termion::input::TermRead;
 
+pub mod handlers;
 pub enum Event<I> {
     Input(I),
     Tick,
@@ -58,7 +59,6 @@ impl Events {
             })
         };
         let tick_handle = {
-            let tx = tx.clone();
             thread::spawn(move || {
                 let tx = tx.clone();
                 loop {
