@@ -35,7 +35,7 @@ pub struct App {
 impl App {
     fn new() -> Self {
         let chats: Vec<(String, Vec<String>)> = vec![
-            ("Kalle kule".into(), Vec::new()),
+            ("Kalle".into(), Vec::new()),
             ("Bertil Hulgesson".into(), Vec::new()),
             ("Hubert Snubert".into(), Vec::new()),
             ("Aleks".into(), Vec::new()),

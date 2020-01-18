@@ -56,7 +56,7 @@ async fn message_broker(mut receiver: Receiver<NetEvent>) -> Result<()> {
         if let Some(receiving_participant) = peers.get(&event.message.to) {
             let mut receiveing_stream = &*receiving_participant.clone();
             receiveing_stream
-                .write_all(&*bincode::serialize(&event.message.message)?)
+                .write_all(&bincode::serialize(&event.message)?)
                 .await?;
         } else {
             println!("No peer with id {} connected", event.message.to);

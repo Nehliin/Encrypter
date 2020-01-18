@@ -1,6 +1,6 @@
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use encrypter_core::{Protocol, Result, MESSAGE_PACKET_SIZE};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufReader, Read, Write};
 use std::net::TcpStream;
 use std::net::ToSocketAddrs;
 #[derive(Debug)]
@@ -33,14 +33,21 @@ impl ServerConnection {
         let reader = self.stream.try_clone().unwrap();
         let sender = self.incoming_sender.clone();
         std::thread::spawn(move || {
-            let reader = BufReader::new(reader);
-
-            for line in reader.lines() {
-                let message = bincode::deserialize::<Protocol>(&line.unwrap().as_bytes())
-                    .expect("Failed to parse message"); // TODO: This should be handled better
-                sender
-                    .send(message) // TODO: this as well
-                    .expect("Failed to sennd message from tcp listener thread");
+            let mut reader = BufReader::new(reader);
+            let mut buffer = vec![0 as u8; MESSAGE_PACKET_SIZE];
+            loop {
+                if let Ok(n) = reader.read(&mut buffer) {
+                    match bincode::deserialize::<Protocol>(&buffer[..n]) {
+                        Ok(message) => {
+                            sender
+                                .send(message) // TODO: this as well
+                                .expect("Failed to sennd message from tcp listener thread");
+                        }
+                        Err(err) => {
+                            println!("Could not parse message from incomming traffic {}", err);
+                        }
+                    }
+                }
             }
         });
         Ok(())
