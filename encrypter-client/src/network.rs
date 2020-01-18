@@ -14,7 +14,7 @@ pub struct ServerConnection {
 }
 
 impl ServerConnection {
-    pub fn new(server_addr: impl ToSocketAddrs) -> Result<Self> {
+    pub fn new(server_addr: impl ToSocketAddrs, id: String) -> Result<Self> {
         let stream = TcpStream::connect(&server_addr)?;
         let (incoming_sender, incoming_receiver) = unbounded();
         let (outgoing_sender, outgoing_receiver) = unbounded();
@@ -25,6 +25,7 @@ impl ServerConnection {
             incoming_sender,
             stream,
         };
+        connection.send(Protocol::NewConnection(id))?;
         connection.server_connection_loop()?;
         Ok(connection)
     }

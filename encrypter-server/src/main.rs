@@ -52,14 +52,24 @@ async fn message_broker(mut receiver: Receiver<NetEvent>) -> Result<()> {
     // fuse makes sure that the future won't be polled again, this shouldn't happen (I think)
     // but it's good to make sure either way.
     while let Some(event) = receiver.next().fuse().await {
-        peers.insert(event.message.from.clone(), event.stream.clone());
-        if let Some(receiving_participant) = peers.get(&event.message.to) {
-            let mut receiveing_stream = &*receiving_participant.clone();
-            receiveing_stream
-                .write_all(&bincode::serialize(&event.message)?)
-                .await?;
-        } else {
-            println!("No peer with id {} connected", event.message.to);
+        match event.message {
+            Protocol::NewConnection(id) => {
+                peers.insert(id, event.stream.clone());
+            }
+            Protocol::RemoveConnection => {
+                println!("Peer disconnected",);
+                todo!("Remove peers from map")
+            }
+            Protocol::Message(message) => {
+                if let Some(receiving_participant) = peers.get(&message.to) {
+                    let mut receiveing_stream = &*receiving_participant.clone();
+                    receiveing_stream
+                        .write_all(&bincode::serialize(&Protocol::Message(message))?)
+                        .await?;
+                } else {
+                    println!("No peer with id {} connected", message.to);
+                }
+            }
         }
     }
     Ok(())
@@ -74,13 +84,25 @@ async fn listen_to_traffic(mut sender: Sender<NetEvent>, stream: TcpStream) -> R
     let mut reader = BufReader::new(&*stream);
     let mut buffer = vec![0 as u8; MESSAGE_PACKET_SIZE];
     loop {
-        if let Ok(n) = reader.read(&mut buffer).await {
-            match bincode::deserialize::<Protocol>(&buffer[..n]) {
-                Ok(message) => {
-                    println!("Message received: {:#?}", message);
+        match reader.read(&mut buffer).await {
+            Ok(0) | Err(_) => {
+                // Probable disconnect from client
+                sender
+                    .send(NetEvent {
+                        message: Protocol::RemoveConnection,
+                        stream: stream.clone(),
+                    })
+                    .await
+                    .unwrap_or_else(|err| println!("Couldn't send message over channel {}", err));
+
+                break Ok(());
+            }
+            Ok(n) => match bincode::deserialize::<Protocol>(&buffer[..n]) {
+                Ok(protocol) => {
+                    println!("Protocol Message received: {:#?}", protocol);
                     sender
                         .send(NetEvent {
-                            message,
+                            message: protocol,
                             stream: stream.clone(),
                         })
                         .await
@@ -91,7 +113,7 @@ async fn listen_to_traffic(mut sender: Sender<NetEvent>, stream: TcpStream) -> R
                 Err(err) => {
                     println!("Could not parse message from incomming traffic {}", err);
                 }
-            }
+            },
         }
     }
 }

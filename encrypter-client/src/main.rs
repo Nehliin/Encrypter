@@ -1,4 +1,5 @@
 use crate::events::{Event, Events};
+use encrypter_core::Protocol;
 use encrypter_core::Result;
 use termion::cursor::Goto;
 use termion::event::Key;
@@ -133,9 +134,9 @@ fn main() -> Result<()> {
     let mut app = App::new();
     loop {
         if let Some(ref mut connection) = app.connection {
-            if let Some(incoming) = connection.step()? {
+            if let Some(Protocol::Message(incoming)) = connection.step()? {
                 if let Some(messages) = app.get_chat_for(&incoming.from) {
-                    messages.push(format!("{}: {}", incoming.from, incoming.message));
+                    messages.push(format!("{}: {}", incoming.from, incoming.content));
                 }
             }
         }

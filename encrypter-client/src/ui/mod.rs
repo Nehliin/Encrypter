@@ -107,10 +107,6 @@ where
         current_route.active_block == ActiveBlock::Id,
         current_route.hovered_block == ActiveBlock::Id,
     );
-    /*  let highlight_server_state = (
-        current_route.active_block == ActiveBlock::ServerAddr,
-        current_route.hovered_block == ActiveBlock::ServerAddr,
-    );*/
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -134,13 +130,4 @@ where
                 .title("Id"),
         )
         .render(frame, chunks[0]);
-    /*Paragraph::new([Text::raw(&app.server_addr)].iter())
-    .block(
-        Block::default()
-            .title_style(get_color(highlight_server_state))
-            .border_style(get_color(highlight_server_state))
-            .borders(Borders::ALL)
-            .title("Server addr"),
-    )
-    .render(frame, chunks[1]);*/
 }

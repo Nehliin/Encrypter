@@ -1,6 +1,6 @@
 use crate::{network::ServerConnection, ActiveBlock, App, Route, RouteId};
 
-use encrypter_core::Protocol;
+use encrypter_core::{Message, Protocol};
 
 use termion::event::Key;
 
@@ -92,11 +92,11 @@ pub fn chat_window_handler(input: Key, app: &mut App) {
             app.connection
                 .as_ref()
                 .unwrap()
-                .send(Protocol {
+                .send(Protocol::Message(Message {
                     from: app.id.clone(),
                     to: app.chats[app.current_chat_index].0.clone(),
-                    message,
-                })
+                    content: message,
+                }))
                 .expect("Failed to send message");
         }
         Key::Char(c) => {
@@ -114,7 +114,7 @@ pub fn chat_window_handler(input: Key, app: &mut App) {
 pub fn id_handler(input: Key, app: &mut App) {
     match input {
         Key::Char('\n') => {
-            match ServerConnection::new(&app.server_addr) {
+            match ServerConnection::new(&app.server_addr, app.id.clone()) {
                 Ok(connection) => {
                     app.connection = Some(connection);
                 }
