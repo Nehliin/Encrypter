@@ -44,20 +44,20 @@ where
     );
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .margin(2)
-        .constraints([Constraint::Percentage(90), Constraint::Min(3)].as_ref())
+        .constraints([Constraint::Percentage(80), Constraint::Min(3)].as_ref())
         .split(layout_chunk);
 
-    let messages = app.get_current_chat().iter().map(Text::raw);
-    List::new(messages)
-        .block(
-            Block::default()
-                .title_style(get_color(highlight_state))
-                .border_style(get_color(highlight_state))
-                .borders(Borders::ALL)
-                .title("Messages"),
-        )
-        .render(frame, chunks[0]);
+    if let Some(messages) = app.get_current_chat() {
+        List::new(messages.iter().map(Text::raw))
+            .block(
+                Block::default()
+                    .title_style(get_color(highlight_state))
+                    .border_style(get_color(highlight_state))
+                    .borders(Borders::ALL)
+                    .title("Messages"),
+            )
+            .render(frame, chunks[0]);
+    }
     Paragraph::new([Text::raw(&app.message_draft)].iter())
         .block(
             Block::default()
@@ -93,7 +93,7 @@ where
         )
         .items(contacts.as_slice())
         .style(Style::default().fg(Color::White))
-        .select(Some(app.current_chat_index))
+        .select(app.current_chat_index)
         .highlight_style(get_color(highlight_state).modifier(Modifier::REVERSED))
         .render(frame, layout_chunk);
 }

@@ -37,15 +37,21 @@ impl ServerConnection {
             let mut reader = BufReader::new(reader);
             let mut buffer = vec![0 as u8; MESSAGE_PACKET_SIZE];
             loop {
-                if let Ok(n) = reader.read(&mut buffer) {
-                    match bincode::deserialize::<Protocol>(&buffer[..n]) {
-                        Ok(message) => {
-                            sender
-                                .send(message) // TODO: this as well
-                                .expect("Failed to sennd message from tcp listener thread");
-                        }
-                        Err(err) => {
-                            println!("Could not parse message from incomming traffic {}", err);
+                match reader.read(&mut buffer) {
+                    Ok(0) | Err(_) => {
+                        println!("Server connection lost!");
+                        break;
+                    }
+                    Ok(n) => {
+                        match bincode::deserialize::<Protocol>(&buffer[..n]) {
+                            Ok(message) => {
+                                sender
+                                    .send(message) // TODO: this as well
+                                    .expect("Failed to sennd message from tcp listener thread");
+                            }
+                            Err(err) => {
+                                println!("Could not parse message from incomming traffic {}", err);
+                            }
                         }
                     }
                 }

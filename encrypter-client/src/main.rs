@@ -23,7 +23,7 @@ const DEFAULT_ROUTE: Route = Route {
 pub struct App {
     id: String,
     server_addr: String,
-    current_chat_index: usize,
+    current_chat_index: Option<usize>,
     chats: Vec<(String, Vec<String>)>,
     navigation_stack: Vec<Route>,
     input_cursor_pos: u16,
@@ -35,23 +35,15 @@ pub struct App {
 
 impl App {
     fn new() -> Self {
-        let chats: Vec<(String, Vec<String>)> = vec![
-            ("Kalle".into(), Vec::new()),
-            ("Bertil Hulgesson".into(), Vec::new()),
-            ("Hubert Snubert".into(), Vec::new()),
-            ("Aleks".into(), Vec::new()),
-        ]
-        .into_iter()
-        .collect();
         App {
             navigation_stack: vec![DEFAULT_ROUTE],
             cursor_vertical_offset: 4,
             cursor_horizontal_offset: 4,
             id: String::new(),
             connection: None,
-            current_chat_index: 0,
+            current_chat_index: None,
             message_draft: String::new(),
-            chats,
+            chats: Vec::new(),
             input_cursor_pos: 0,
             server_addr: String::from("127.0.0.1:1337"),
         }
@@ -64,8 +56,12 @@ impl App {
         }
     }
 
-    pub fn get_current_chat(&mut self) -> &mut Vec<String> {
-        &mut self.chats[self.current_chat_index].1
+    pub fn get_current_chat(&mut self) -> Option<&mut Vec<String>> {
+        if let Some(index) = self.current_chat_index {
+            Some(&mut self.chats[index].1)
+        } else {
+            None
+        }
     }
 
     pub fn get_chat_for(&mut self, contact: &str) -> Option<&mut Vec<String>> {
@@ -134,9 +130,20 @@ fn main() -> Result<()> {
     let mut app = App::new();
     loop {
         if let Some(ref mut connection) = app.connection {
-            if let Some(Protocol::Message(incoming)) = connection.step()? {
-                if let Some(messages) = app.get_chat_for(&incoming.from) {
-                    messages.push(format!("{}: {}", incoming.from, incoming.content));
+            if let Some(protocol_message) = connection.step()? {
+                match protocol_message {
+                    Protocol::Message(incoming) => {
+                        if let Some(messages) = app.get_chat_for(&incoming.from) {
+                            messages.push(format!("{}: {}", incoming.from, incoming.content));
+                        }
+                    }
+                    Protocol::PeerList(peers) => {
+                        app.chats = peers
+                            .into_iter()
+                            .map(|peer| (peer, Vec::new()))
+                            .collect::<Vec<(String, Vec<String>)>>();
+                    }
+                    _ => {}
                 }
             }
         }

@@ -15,7 +15,7 @@ type Receiver<T> = mpsc::UnboundedReceiver<T>;
 type Sender<T> = mpsc::UnboundedSender<T>;
 
 struct NetEvent {
-    pub message: Protocol,
+    pub protocol_message: Protocol,
     pub stream: Arc<TcpStream>,
 }
 
@@ -52,9 +52,19 @@ async fn message_broker(mut receiver: Receiver<NetEvent>) -> Result<()> {
     // fuse makes sure that the future won't be polled again, this shouldn't happen (I think)
     // but it's good to make sure either way.
     while let Some(event) = receiver.next().fuse().await {
-        match event.message {
+        match event.protocol_message {
             Protocol::NewConnection(id) => {
                 peers.insert(id, event.stream.clone());
+                let mut other_peers = Vec::with_capacity(peers.keys().len());
+                peers.keys().for_each(|peer| other_peers.push(peer.clone()));
+                for arc_stream in peers.values() {
+                    let mut stream = &**arc_stream;
+                    stream
+                        .write_all(&bincode::serialize(&Protocol::PeerList(
+                            other_peers.clone(),
+                        ))?)
+                        .await?;
+                }
             }
             Protocol::RemoveConnection => {
                 println!("Peer disconnected",);
@@ -62,7 +72,7 @@ async fn message_broker(mut receiver: Receiver<NetEvent>) -> Result<()> {
             }
             Protocol::Message(message) => {
                 if let Some(receiving_participant) = peers.get(&message.to) {
-                    let mut receiveing_stream = &*receiving_participant.clone();
+                    let mut receiveing_stream = &**receiving_participant;
                     receiveing_stream
                         .write_all(&bincode::serialize(&Protocol::Message(message))?)
                         .await?;
@@ -70,6 +80,7 @@ async fn message_broker(mut receiver: Receiver<NetEvent>) -> Result<()> {
                     println!("No peer with id {} connected", message.to);
                 }
             }
+            _ => {}
         }
     }
     Ok(())
@@ -89,7 +100,7 @@ async fn listen_to_traffic(mut sender: Sender<NetEvent>, stream: TcpStream) -> R
                 // Probable disconnect from client
                 sender
                     .send(NetEvent {
-                        message: Protocol::RemoveConnection,
+                        protocol_message: Protocol::RemoveConnection,
                         stream: stream.clone(),
                     })
                     .await
@@ -98,11 +109,11 @@ async fn listen_to_traffic(mut sender: Sender<NetEvent>, stream: TcpStream) -> R
                 break Ok(());
             }
             Ok(n) => match bincode::deserialize::<Protocol>(&buffer[..n]) {
-                Ok(protocol) => {
-                    println!("Protocol Message received: {:#?}", protocol);
+                Ok(protocol_message) => {
+                    println!("Protocol Message received: {:#?}", protocol_message);
                     sender
                         .send(NetEvent {
-                            message: protocol,
+                            protocol_message,
                             stream: stream.clone(),
                         })
                         .await

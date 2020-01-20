@@ -16,4 +16,5 @@ pub enum Protocol {
     Message(Message),
     NewConnection(String),
     RemoveConnection,
+    PeerList(Vec<String>),
 }

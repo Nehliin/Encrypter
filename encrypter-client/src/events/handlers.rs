@@ -64,16 +64,24 @@ pub fn chat_list_handler(input: Key, app: &mut App) {
             app.set_current_route_state(Some(ActiveBlock::Empty), Some(ActiveBlock::ChatWindow));
         }
         Key::Up => {
-            if app.current_chat_index > 0 {
-                app.current_chat_index -= 1;
+            if let Some(index) = app.current_chat_index {
+                if index > 0 {
+                    app.current_chat_index = Some(index - 1);
+                }
             }
         }
         Key::Down => {
-            if app.current_chat_index < app.chats.len() - 1 {
-                app.current_chat_index += 1;
+            if let Some(index) = app.current_chat_index {
+                if index < app.chats.len() - 1 {
+                    app.current_chat_index = Some(index + 1);
+                }
             }
         }
-        Key::Char('\n') => {}
+        Key::Char('\n') => {
+            if !app.chats.is_empty() {
+                app.current_chat_index = Some(0);
+            }
+        }
         _ => {}
     }
 }
@@ -87,17 +95,18 @@ pub fn chat_window_handler(input: Key, app: &mut App) {
         }
         Key::Char('\n') => {
             let message = app.message_draft.drain(..).collect::<String>();
-            let current_chat = app.get_current_chat();
-            current_chat.push(format!("Me: {}", message.clone()));
-            app.connection
-                .as_ref()
-                .unwrap()
-                .send(Protocol::Message(Message {
-                    from: app.id.clone(),
-                    to: app.chats[app.current_chat_index].0.clone(),
-                    content: message,
-                }))
-                .expect("Failed to send message");
+            if let Some(current_chat) = app.get_current_chat() {
+                current_chat.push(format!("Me: {}", message.clone()));
+                app.connection
+                    .as_ref()
+                    .unwrap()
+                    .send(Protocol::Message(Message {
+                        from: app.id.clone(),
+                        to: app.chats[app.current_chat_index.unwrap()].0.clone(), // Safe because of previous if let
+                        content: message,
+                    }))
+                    .expect("Failed to send message");
+            }
         }
         Key::Char(c) => {
             if app.message_draft.len() < encrypter_core::MESSAGE_MAX_SIZE {
