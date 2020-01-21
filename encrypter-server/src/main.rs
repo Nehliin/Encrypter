@@ -1,5 +1,8 @@
 use futures::{channel::mpsc, FutureExt, SinkExt, StreamExt};
+use x25519_dalek::{SharedSecret, EphemeralSecret, PublicKey};
 use std::{collections::hash_map::HashMap, sync::Arc};
+use lazy_static::lazy_static;
+use rand_os::OsRng;
 
 use async_std::{
     io::BufReader,
@@ -17,6 +20,26 @@ type Sender<T> = mpsc::UnboundedSender<T>;
 struct NetEvent {
     pub protocol_message: Protocol,
     pub stream: Arc<TcpStream>,
+}
+
+lasy_static! {
+    let mut seed = OsRng::new().unwrap();
+    static ref PRIVATE_KEY: EphemeralSecret::new(&mut seed);
+}
+
+struct Peer {
+    tcp_stream: Arc<TcpStream>,
+    shared_key: SharedSecret,
+}
+
+impl Peer {
+    fn new(tcp_stream: Arc<TcpStream>, public_key: PublicKey) -> Self {
+        let shared_key = PRIVATE_KEY.diffie_hellman(&public_key);
+        Peer {
+            tcp_stream,
+            shared_key
+        }
+    }
 }
 
 fn main() -> Result<()> {
@@ -47,13 +70,13 @@ fn spawn_listener_task(sender: Sender<NetEvent>, stream: TcpStream) {
 // This is where all the magic happens, there is only one message broker task on each server
 // that means it's possible (but not scalable) to keep all peer info in memory.
 async fn message_broker(mut receiver: Receiver<NetEvent>) -> Result<()> {
-    let mut peers: HashMap<String, Arc<TcpStream>> = HashMap::new();
+    let mut peers: HashMap<String, Peer> = HashMap::new();
     // continue to wait for new NetEvents
     // fuse makes sure that the future won't be polled again, this shouldn't happen (I think)
     // but it's good to make sure either way.
     while let Some(event) = receiver.next().fuse().await {
         match event.protocol_message {
-            Protocol::NewConnection(id) => {
+            Protocol::NewConnection(id, public_key) => {
                 peers.insert(id, event.stream.clone());
                 let mut other_peers = Vec::with_capacity(peers.keys().len());
                 peers.keys().for_each(|peer| other_peers.push(peer.clone()));

@@ -14,7 +14,7 @@ pub struct Message {
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub enum Protocol {
     Message(Message),
-    NewConnection(String),
+    NewConnection(String, [u8; 32]),
     RemoveConnection,
     PeerList(Vec<String>),
 }
