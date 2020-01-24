@@ -1,6 +1,6 @@
 use crate::{network::ServerConnection, ActiveBlock, App, Route, RouteId};
 
-use encrypter_core::{Message, Protocol};
+use encrypter_core::{EncryptedMessage, Message, Protocol};
 
 use termion::event::Key;
 
@@ -87,24 +87,26 @@ pub fn chat_list_handler(input: Key, app: &mut App) {
 }
 
 pub fn chat_window_handler(input: Key, app: &mut App) {
-    //app.cursor_vertical_offset = 25;
-    //app.cursor_horizontal_offset = 70;
     match input {
         Key::Left => {
             app.set_current_route_state(Some(ActiveBlock::Empty), Some(ActiveBlock::ChatList));
         }
         Key::Char('\n') => {
             let message = app.message_draft.drain(..).collect::<String>();
+            let message = Message {
+                from: app.id.clone(),
+                to: app.chats[app.current_chat_index.unwrap()].0.clone(), // Safe because of previous if let
+                content: message,
+            };
             if let Some(current_chat) = app.get_current_chat() {
-                current_chat.push(format!("Me: {}", message.clone()));
+                current_chat
+                    .messages
+                    .push(format!("Me: {}", message.content));
+                let encrypted_message = EncryptedMessage::create(message, &current_chat.shared_key);
                 app.connection
                     .as_ref()
                     .unwrap()
-                    .send(Protocol::Message(Message {
-                        from: app.id.clone(),
-                        to: app.chats[app.current_chat_index.unwrap()].0.clone(), // Safe because of previous if let
-                        content: message,
-                    }))
+                    .send(Protocol::Message(encrypted_message))
                     .expect("Failed to send message");
             }
         }

@@ -12,3 +12,6 @@ tui = "0.7.0"
 termion = "1.5"
 encrypter-core = {path = "../encrypter-core"}
 bincode = "1.2.1"
+x25519-dalek = "0.6.0"
+once_cell = "1.3.1"
+rand = "0.7.3"

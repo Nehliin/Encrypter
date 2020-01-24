@@ -19,6 +19,11 @@ struct NetEvent {
     pub stream: Arc<TcpStream>,
 }
 
+struct Peer {
+    tcp_stream: Arc<TcpStream>,
+    public_key: [u8; 32],
+}
+
 fn main() -> Result<()> {
     task::block_on(accept_connections("127.0.0.1:1337"))
 }
@@ -47,21 +52,27 @@ fn spawn_listener_task(sender: Sender<NetEvent>, stream: TcpStream) {
 // This is where all the magic happens, there is only one message broker task on each server
 // that means it's possible (but not scalable) to keep all peer info in memory.
 async fn message_broker(mut receiver: Receiver<NetEvent>) -> Result<()> {
-    let mut peers: HashMap<String, Arc<TcpStream>> = HashMap::new();
+    let mut peers: HashMap<String, Peer> = HashMap::new();
     // continue to wait for new NetEvents
     // fuse makes sure that the future won't be polled again, this shouldn't happen (I think)
     // but it's good to make sure either way.
     while let Some(event) = receiver.next().fuse().await {
         match event.protocol_message {
-            Protocol::NewConnection(id) => {
-                peers.insert(id, event.stream.clone());
-                let mut other_peers = Vec::with_capacity(peers.keys().len());
-                peers.keys().for_each(|peer| other_peers.push(peer.clone()));
-                for arc_stream in peers.values() {
-                    let mut stream = &**arc_stream;
+            Protocol::NewConnection(id, public_key) => {
+                let peer = Peer {
+                    tcp_stream: event.stream.clone(),
+                    public_key,
+                };
+                peers.insert(id, peer);
+                let connected_peers = peers
+                    .iter()
+                    .map(|(id, peer)| (id.clone(), peer.public_key))
+                    .collect::<Vec<(String, [u8; 32])>>();
+                for peer in peers.values() {
+                    let mut stream = &*peer.tcp_stream;
                     stream
                         .write_all(&bincode::serialize(&Protocol::PeerList(
-                            other_peers.clone(),
+                            connected_peers.clone(),
                         ))?)
                         .await?;
                 }
@@ -70,14 +81,15 @@ async fn message_broker(mut receiver: Receiver<NetEvent>) -> Result<()> {
                 println!("Peer disconnected",);
                 todo!("Remove peers from map")
             }
-            Protocol::Message(message) => {
-                if let Some(receiving_participant) = peers.get(&message.to) {
-                    let mut receiveing_stream = &**receiving_participant;
+            Protocol::Message(encrypted_message) => {
+                let (_from, to) = encrypted_message.get_info();
+                if let Some(receiving_participant) = peers.get(to) {
+                    let mut receiveing_stream = &*receiving_participant.tcp_stream;
                     receiveing_stream
-                        .write_all(&bincode::serialize(&Protocol::Message(message))?)
+                        .write_all(&bincode::serialize(&Protocol::Message(encrypted_message))?)
                         .await?;
                 } else {
-                    println!("No peer with id {} connected", message.to);
+                    println!("No peer with id {} connected", to);
                 }
             }
             _ => {}

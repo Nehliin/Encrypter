@@ -1,4 +1,5 @@
 use crate::events::{Event, Events};
+use chat::Chat;
 use encrypter_core::Protocol;
 use encrypter_core::Result;
 use termion::cursor::Goto;
@@ -9,6 +10,7 @@ use termion::screen::AlternateScreen;
 use tui::backend::TermionBackend;
 use tui::Terminal;
 
+mod chat;
 mod events;
 mod network;
 mod ui;
@@ -19,16 +21,14 @@ const DEFAULT_ROUTE: Route = Route {
     hovered_block: ActiveBlock::Id,
 };
 
-#[derive(Debug)]
 pub struct App {
     id: String,
     server_addr: String,
     current_chat_index: Option<usize>,
-    chats: Vec<(String, Vec<String>)>,
+    chats: Vec<(String, Chat)>,
     navigation_stack: Vec<Route>,
     input_cursor_pos: u16,
     cursor_vertical_offset: u16,
-    cursor_horizontal_offset: u16,
     message_draft: String,
     connection: Option<network::ServerConnection>,
 }
@@ -38,7 +38,6 @@ impl App {
         App {
             navigation_stack: vec![DEFAULT_ROUTE],
             cursor_vertical_offset: 4,
-            cursor_horizontal_offset: 4,
             id: String::new(),
             connection: None,
             current_chat_index: None,
@@ -56,7 +55,7 @@ impl App {
         }
     }
 
-    pub fn get_current_chat(&mut self) -> Option<&mut Vec<String>> {
+    pub(crate) fn get_current_chat(&mut self) -> Option<&mut Chat> {
         if let Some(index) = self.current_chat_index {
             Some(&mut self.chats[index].1)
         } else {
@@ -64,13 +63,11 @@ impl App {
         }
     }
 
-    pub fn get_chat_for(&mut self, contact: &str) -> Option<&mut Vec<String>> {
-        for (user, chat) in self.chats.iter_mut() {
-            if contact == user {
-                return Some(chat);
-            }
-        }
-        None
+    pub(crate) fn get_chat_for(&mut self, contact: &str) -> Option<&mut Chat> {
+        self.chats
+            .iter_mut()
+            .find(|(user, _chat)| user == contact)
+            .map(|(_, chat)| chat)
     }
 
     fn get_current_route_mut(&mut self) -> &mut Route {
@@ -132,16 +129,20 @@ fn main() -> Result<()> {
         if let Some(ref mut connection) = app.connection {
             if let Some(protocol_message) = connection.step()? {
                 match protocol_message {
-                    Protocol::Message(incoming) => {
-                        if let Some(messages) = app.get_chat_for(&incoming.from) {
-                            messages.push(format!("{}: {}", incoming.from, incoming.content));
+                    Protocol::Message(encrypted_incoming) => {
+                        let incoming = encrypted_incoming.get_message();
+                        if let Some(chat) = app.get_chat_for(&incoming.from) {
+                            chat.messages
+                                .push(format!("{}: {}", incoming.from, incoming.content));
                         }
                     }
                     Protocol::PeerList(peers) => {
                         app.chats = peers
                             .into_iter()
-                            .map(|peer| (peer, Vec::new()))
-                            .collect::<Vec<(String, Vec<String>)>>();
+                            .map(|(peer_id, public_key_buffer)| {
+                                (peer_id, Chat::new(public_key_buffer))
+                            })
+                            .collect::<Vec<(String, Chat)>>();
                     }
                     _ => {}
                 }

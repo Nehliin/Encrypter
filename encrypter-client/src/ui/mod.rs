@@ -47,8 +47,8 @@ where
         .constraints([Constraint::Percentage(80), Constraint::Min(3)].as_ref())
         .split(layout_chunk);
 
-    if let Some(messages) = app.get_current_chat() {
-        List::new(messages.iter().map(Text::raw))
+    if let Some(chat) = app.get_current_chat() {
+        List::new(chat.messages.iter().map(Text::raw))
             .block(
                 Block::default()
                     .title_style(get_color(highlight_state))
