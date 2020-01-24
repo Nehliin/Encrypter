@@ -1,3 +1,6 @@
+use aes_soft::block_cipher_trait::generic_array::GenericArray;
+use aes_soft::block_cipher_trait::BlockCipher;
+use aes_soft::Aes256;
 use serde::{Deserialize, Serialize};
 use x25519_dalek::SharedSecret;
 
@@ -11,19 +14,45 @@ pub struct EncryptedMessage(Message);
 
 impl EncryptedMessage {
     pub fn create(mut message: Message, shared_key: &SharedSecret) -> Self {
-        // encrypted
-        unsafe {
-            message
-                .content
-                .as_bytes_mut()
-                .iter_mut()
-                .zip(shared_key.as_bytes().iter().cycle())
-                .for_each(|(mb, kb)| *mb ^= kb);
-        }
-        message.content = String::from_utf8_lossy(message.content.as_bytes()).to_string();
+        // encrypt the message
+        let key = GenericArray::from_slice(shared_key.as_bytes());
+        let cipher = Aes256::new(&key);
+
+        message
+            .content
+            .as_mut_slice()
+            .chunks_exact_mut(16)
+            .for_each(|mut chunk| {
+                cipher.encrypt_block(GenericArray::from_mut_slice(&mut chunk));
+            });
+
+        let last_block = &mut [0u8; 16];
+        message
+            .content
+            .as_slice()
+            .chunks_exact(16)
+            .remainder()
+            .iter()
+            .zip(last_block.iter_mut())
+            .for_each(|(chunk_byte, lblock_byte)| *lblock_byte = *chunk_byte);
+        cipher.encrypt_block(GenericArray::from_mut_slice(last_block));
+        let message_lenght = message.content.len();
+        let mut encrypted_message: Vec<u8> =
+            message.content[..message_lenght - (message_lenght % 16)].to_vec();
+        encrypted_message.extend_from_slice(last_block);
+        message.content = encrypted_message;
         EncryptedMessage(message)
     }
-    pub fn get_message(self) -> Message {
+    pub fn decrypt_message(mut self, shared_key: &SharedSecret) -> Message {
+        let key = GenericArray::from_slice(shared_key.as_bytes());
+        let cipher = Aes256::new(&key);
+        self.0
+            .content
+            .as_mut_slice()
+            .chunks_exact_mut(16)
+            .for_each(|mut chunk| {
+                cipher.decrypt_block(GenericArray::from_mut_slice(&mut chunk));
+            });
         self.0
     }
 
@@ -35,7 +64,7 @@ impl EncryptedMessage {
 pub struct Message {
     pub from: String,
     pub to: String,
-    pub content: String,
+    pub content: Vec<u8>,
 }
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub enum Protocol {
