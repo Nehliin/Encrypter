@@ -1,8 +1,18 @@
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use encrypter_core::{Protocol, Result, MESSAGE_PACKET_SIZE};
+use once_cell::sync::Lazy;
+use rand::rngs::OsRng;
 use std::io::{BufReader, Read, Write};
 use std::net::TcpStream;
 use std::net::ToSocketAddrs;
+use x25519_dalek::{PublicKey, StaticSecret};
+
+pub(crate) static PRIVATE_KEY: Lazy<StaticSecret> = Lazy::new(|| {
+    let mut seed = OsRng::default();
+    StaticSecret::new(&mut seed)
+});
+static PUBLIC_KEY: Lazy<PublicKey> = Lazy::new(|| PublicKey::from(&*PRIVATE_KEY));
+
 #[derive(Debug)]
 pub struct ServerConnection {
     outgoing_sender: Sender<Protocol>,
@@ -25,7 +35,7 @@ impl ServerConnection {
             incoming_sender,
             stream,
         };
-        connection.send(Protocol::NewConnection(id))?;
+        connection.send(Protocol::NewConnection(id, *PUBLIC_KEY.as_bytes()))?;
         connection.server_connection_loop()?;
         Ok(connection)
     }
