@@ -130,10 +130,19 @@ fn main() -> Result<()> {
             if let Some(protocol_message) = connection.step()? {
                 match protocol_message {
                     Protocol::Message(encrypted_incoming) => {
-                        let incoming = encrypted_incoming.get_message();
-                        if let Some(chat) = app.get_chat_for(&incoming.from) {
-                            chat.messages
-                                .push(format!("{}: {}", incoming.from, incoming.content));
+                        let (from, _to) = encrypted_incoming.get_info();
+                        if let Some(chat) = app.get_chat_for(from) {
+                            let incoming = encrypted_incoming.decrypt_message(&chat.shared_key);
+                            if let Some(chat) = app.get_chat_for(&incoming.from) {
+                                chat.messages.push(format!(
+                                    "{}: {}",
+                                    incoming.from,
+                                    String::from_utf8_lossy(&incoming.content)
+                                ));
+                            }
+                        } else {
+                            println!("Missing decryption key");
+                            todo!("Handle this error in a better way");
                         }
                     }
                     Protocol::PeerList(peers) => {

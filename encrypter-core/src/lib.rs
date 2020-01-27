@@ -1,3 +1,6 @@
+use aes_soft::block_cipher_trait::generic_array::GenericArray;
+use aes_soft::block_cipher_trait::BlockCipher;
+use aes_soft::Aes256;
 use serde::{Deserialize, Serialize};
 use x25519_dalek::SharedSecret;
 
@@ -11,19 +14,32 @@ pub struct EncryptedMessage(Message);
 
 impl EncryptedMessage {
     pub fn create(mut message: Message, shared_key: &SharedSecret) -> Self {
-        // encrypted
-        unsafe {
-            message
-                .content
-                .as_bytes_mut()
-                .iter_mut()
-                .zip(shared_key.as_bytes().iter().cycle())
-                .for_each(|(mb, kb)| *mb ^= kb);
-        }
-        message.content = String::from_utf8_lossy(message.content.as_bytes()).to_string();
+        let key = GenericArray::from_slice(shared_key.as_bytes());
+        let cipher = Aes256::new(&key);
+
+        // Padd the message to be a multiple of 16
+        let padd_size = 16 - (message.content.len() % 16);
+        message.content.resize(message.content.len() + padd_size, 0);
+        message
+            .content
+            .as_mut_slice()
+            .chunks_exact_mut(16)
+            .for_each(|mut chunk| {
+                cipher.encrypt_block(GenericArray::from_mut_slice(&mut chunk));
+            });
+
         EncryptedMessage(message)
     }
-    pub fn get_message(self) -> Message {
+    pub fn decrypt_message(mut self, shared_key: &SharedSecret) -> Message {
+        let key = GenericArray::from_slice(shared_key.as_bytes());
+        let cipher = Aes256::new(&key);
+        self.0
+            .content
+            .as_mut_slice()
+            .chunks_exact_mut(16)
+            .for_each(|mut chunk| {
+                cipher.decrypt_block(GenericArray::from_mut_slice(&mut chunk));
+            });
         self.0
     }
 
@@ -35,7 +51,7 @@ impl EncryptedMessage {
 pub struct Message {
     pub from: String,
     pub to: String,
-    pub content: String,
+    pub content: Vec<u8>,
 }
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub enum Protocol {

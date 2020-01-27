@@ -96,12 +96,12 @@ pub fn chat_window_handler(input: Key, app: &mut App) {
             let message = Message {
                 from: app.id.clone(),
                 to: app.chats[app.current_chat_index.unwrap()].0.clone(), // Safe because of previous if let
-                content: message,
+                content: message.as_bytes().to_vec(),
             };
             if let Some(current_chat) = app.get_current_chat() {
                 current_chat
                     .messages
-                    .push(format!("Me: {}", message.content));
+                    .push(format!("Me: {}", String::from_utf8_lossy(&message.content)));
                 let encrypted_message = EncryptedMessage::create(message, &current_chat.shared_key);
                 app.connection
                     .as_ref()

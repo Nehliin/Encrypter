@@ -79,7 +79,6 @@ async fn message_broker(mut receiver: Receiver<NetEvent>) -> Result<()> {
             }
             Protocol::RemoveConnection => {
                 println!("Peer disconnected",);
-                todo!("Remove peers from map")
             }
             Protocol::Message(encrypted_message) => {
                 let (_from, to) = encrypted_message.get_info();
