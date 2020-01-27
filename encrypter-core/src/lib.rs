@@ -14,10 +14,12 @@ pub struct EncryptedMessage(Message);
 
 impl EncryptedMessage {
     pub fn create(mut message: Message, shared_key: &SharedSecret) -> Self {
-        // encrypt the message
         let key = GenericArray::from_slice(shared_key.as_bytes());
         let cipher = Aes256::new(&key);
 
+        // Padd the message to be a multiple of 16
+        let padd_size = 16 - (message.content.len() % 16);
+        message.content.resize(message.content.len() + padd_size, 0);
         message
             .content
             .as_mut_slice()
@@ -26,21 +28,6 @@ impl EncryptedMessage {
                 cipher.encrypt_block(GenericArray::from_mut_slice(&mut chunk));
             });
 
-        let last_block = &mut [0u8; 16];
-        message
-            .content
-            .as_slice()
-            .chunks_exact(16)
-            .remainder()
-            .iter()
-            .zip(last_block.iter_mut())
-            .for_each(|(chunk_byte, lblock_byte)| *lblock_byte = *chunk_byte);
-        cipher.encrypt_block(GenericArray::from_mut_slice(last_block));
-        let message_lenght = message.content.len();
-        let mut encrypted_message: Vec<u8> =
-            message.content[..message_lenght - (message_lenght % 16)].to_vec();
-        encrypted_message.extend_from_slice(last_block);
-        message.content = encrypted_message;
         EncryptedMessage(message)
     }
     pub fn decrypt_message(mut self, shared_key: &SharedSecret) -> Message {
