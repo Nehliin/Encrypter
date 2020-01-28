@@ -1,5 +1,5 @@
-use futures::{channel::mpsc, FutureExt, SinkExt, StreamExt};
-use std::{collections::hash_map::HashMap, sync::Arc};
+#[macro_use]
+extern crate log;
 
 use async_std::{
     io::BufReader,
@@ -11,6 +11,10 @@ use async_std::{
 use encrypter_core::Protocol;
 use encrypter_core::Result;
 use encrypter_core::MESSAGE_PACKET_SIZE;
+use futures::{channel::mpsc, FutureExt, SinkExt, StreamExt};
+use simplelog::*;
+use std::fs::File;
+use std::{collections::hash_map::HashMap, sync::Arc};
 type Receiver<T> = mpsc::UnboundedReceiver<T>;
 type Sender<T> = mpsc::UnboundedSender<T>;
 
@@ -25,6 +29,16 @@ struct Peer {
 }
 
 fn main() -> Result<()> {
+    CombinedLogger::init(vec![
+        TermLogger::new(LevelFilter::Debug, Config::default(), TerminalMode::Mixed)
+            .expect("Can't log to terminal"),
+        WriteLogger::new(
+            LevelFilter::Info,
+            Config::default(),
+            File::create("server_logs.log").expect("Can't create log file"),
+        ),
+    ])
+    .expect("Failed to initalize logger");
     task::block_on(accept_connections("127.0.0.1:1337"))
 }
 
@@ -35,7 +49,7 @@ async fn accept_connections(addr: &str) -> Result<()> {
     let mut incoming = tcp_listener.incoming();
     while let Some(connection) = incoming.next().await {
         let stream = connection?;
-        println!("New connection from: {}", stream.peer_addr()?);
+        info!("New connection from: {}", stream.peer_addr()?);
         spawn_listener_task(sender.clone(), stream);
     }
     Ok(())
@@ -44,7 +58,7 @@ async fn accept_connections(addr: &str) -> Result<()> {
 fn spawn_listener_task(sender: Sender<NetEvent>, stream: TcpStream) {
     task::spawn(async move {
         if let Err(e) = listen_to_traffic(sender, stream).await {
-            eprintln!("Error parsing incomming traffic: {:#?}", e);
+            error!("Error parsing incomming traffic: {:#?}", e);
         }
     });
 }
@@ -78,7 +92,7 @@ async fn message_broker(mut receiver: Receiver<NetEvent>) -> Result<()> {
                 }
             }
             Protocol::RemoveConnection => {
-                println!("Peer disconnected",);
+                info!("Peer disconnected",);
             }
             Protocol::Message(encrypted_message) => {
                 let (_from, to) = encrypted_message.get_info();
@@ -88,7 +102,7 @@ async fn message_broker(mut receiver: Receiver<NetEvent>) -> Result<()> {
                         .write_all(&bincode::serialize(&Protocol::Message(encrypted_message))?)
                         .await?;
                 } else {
-                    println!("No peer with id {} connected", to);
+                    info!("No peer with id {} connected", to);
                 }
             }
             _ => {}
@@ -115,25 +129,23 @@ async fn listen_to_traffic(mut sender: Sender<NetEvent>, stream: TcpStream) -> R
                         stream: stream.clone(),
                     })
                     .await
-                    .unwrap_or_else(|err| println!("Couldn't send message over channel {}", err));
+                    .unwrap_or_else(|err| error!("Couldn't send message over channel {}", err));
 
                 break Ok(());
             }
             Ok(n) => match bincode::deserialize::<Protocol>(&buffer[..n]) {
                 Ok(protocol_message) => {
-                    println!("Protocol Message received: {:#?}", protocol_message);
+                    debug!("Protocol Message received: {:?}", protocol_message);
                     sender
                         .send(NetEvent {
                             protocol_message,
                             stream: stream.clone(),
                         })
                         .await
-                        .unwrap_or_else(|err| {
-                            println!("Couldn't send message over channel {}", err)
-                        });
+                        .unwrap_or_else(|err| error!("Couldn't send message over channel {}", err));
                 }
                 Err(err) => {
-                    println!("Could not parse message from incomming traffic {}", err);
+                    error!("Could not parse message from incomming traffic: {}", err);
                 }
             },
         }

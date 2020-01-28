@@ -1,7 +1,14 @@
+#[macro_use]
+extern crate log;
+
+use simplelog::*;
+
 use crate::events::{Event, Events};
 use chat::Chat;
 use encrypter_core::Protocol;
 use encrypter_core::Result;
+use std::fs::File;
+use std::io::Write;
 use termion::cursor::Goto;
 use termion::event::Key;
 use termion::input::MouseTerminal;
@@ -113,8 +120,14 @@ pub struct Route {
     pub active_block: ActiveBlock,
     pub hovered_block: ActiveBlock,
 }
-use std::io::Write;
+
 fn main() -> Result<()> {
+    let _ = WriteLogger::init(
+        LevelFilter::Info,
+        Config::default(),
+        File::create("client_logs.log").expect("Can't create log file"),
+    );
+
     let stdout = std::io::stdout().into_raw_mode()?;
     let stdout = MouseTerminal::from(stdout);
     let stdout = AlternateScreen::from(stdout);
@@ -141,13 +154,14 @@ fn main() -> Result<()> {
                                 ));
                             }
                         } else {
-                            println!("Missing decryption key");
+                            error!("Missing decryption key from {}", from);
                             todo!("Handle this error in a better way");
                         }
                     }
                     Protocol::PeerList(peers) => {
                         app.chats = peers
                             .into_iter()
+                            .filter(|(peer_id, _)| peer_id != &app.id)
                             .map(|(peer_id, public_key_buffer)| {
                                 (peer_id, Chat::new(public_key_buffer))
                             })
