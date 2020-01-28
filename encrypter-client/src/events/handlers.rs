@@ -130,7 +130,7 @@ pub fn id_handler(input: Key, app: &mut App) {
                     app.connection = Some(connection);
                 }
                 Err(err) => {
-                    eprintln!("Couldn't connect to server {:#?}", err);
+                    error!("Couldn't connect to server {:#?}", err);
                 }
             }
             app.push_route(Route {

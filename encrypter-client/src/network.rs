@@ -49,7 +49,7 @@ impl ServerConnection {
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) | Err(_) => {
-                        println!("Server connection lost!");
+                        error!("Server connection lost!");
                         break;
                     }
                     Ok(n) => {
@@ -60,7 +60,7 @@ impl ServerConnection {
                                     .expect("Failed to sennd message from tcp listener thread");
                             }
                             Err(err) => {
-                                println!("Could not parse message from incomming traffic {}", err);
+                                error!("Could not parse message from incomming traffic {}", err);
                             }
                         }
                     }
