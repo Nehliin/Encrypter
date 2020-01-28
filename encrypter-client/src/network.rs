@@ -49,7 +49,7 @@ impl ServerConnection {
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) | Err(_) => {
-                        info!("Server connection lost!");
+                        error!("Server connection lost!");
                         break;
                     }
                     Ok(n) => {
