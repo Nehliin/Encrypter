@@ -87,38 +87,40 @@ pub fn chat_list_handler(input: Key, app: &mut App) {
 }
 
 pub fn chat_window_handler(input: Key, app: &mut App) {
-    match input {
-        Key::Left => {
-            app.set_current_route_state(Some(ActiveBlock::Empty), Some(ActiveBlock::ChatList));
-        }
-        Key::Char('\n') => {
-            let message = app.message_draft.drain(..).collect::<String>();
-            let message = Message {
-                from: app.id.clone(),
-                to: app.chats[app.current_chat_index.unwrap()].0.clone(), // Safe because of previous if let
-                content: message.as_bytes().to_vec(),
-            };
-            if let Some(current_chat) = app.get_current_chat() {
-                current_chat
-                    .messages
-                    .push(format!("Me: {}", String::from_utf8_lossy(&message.content)));
-                let encrypted_message = EncryptedMessage::create(message, &current_chat.shared_key);
-                app.connection
-                    .as_ref()
-                    .unwrap()
-                    .send(Protocol::Message(encrypted_message))
-                    .expect("Failed to send message");
+    if input == Key::Left {
+        app.set_current_route_state(Some(ActiveBlock::Empty), Some(ActiveBlock::ChatList));
+    } else if app.current_chat_index.is_some() {
+        match input {
+            Key::Char('\n') => {
+                let message = app.message_draft.drain(..).collect::<String>();
+                let message = Message {
+                    from: app.id.clone(),
+                    to: app.chats[app.current_chat_index.unwrap()].0.clone(), // Safe because of previous if let
+                    content: message.as_bytes().to_vec(),
+                };
+                if let Some(current_chat) = app.get_current_chat() {
+                    current_chat
+                        .messages
+                        .push(format!("Me: {}", String::from_utf8_lossy(&message.content)));
+                    let encrypted_message =
+                        EncryptedMessage::create(message, &current_chat.shared_key);
+                    app.connection
+                        .as_ref()
+                        .unwrap()
+                        .send(Protocol::Message(encrypted_message))
+                        .expect("Failed to send message");
+                }
             }
-        }
-        Key::Char(c) => {
-            if app.message_draft.len() < encrypter_core::MESSAGE_MAX_SIZE {
-                app.message_draft.push(c);
+            Key::Char(c) => {
+                if app.message_draft.len() < encrypter_core::MESSAGE_MAX_SIZE {
+                    app.message_draft.push(c);
+                }
             }
+            Key::Backspace => {
+                app.message_draft.pop();
+            }
+            _ => {}
         }
-        Key::Backspace => {
-            app.message_draft.pop();
-        }
-        _ => {}
     }
 }
 
