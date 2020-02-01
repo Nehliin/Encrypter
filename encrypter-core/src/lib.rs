@@ -57,6 +57,7 @@ pub struct Message {
 pub enum Protocol {
     Message(EncryptedMessage),
     NewConnection(String, [u8; 32]),
-    RemoveConnection,
+    InternalRemoveConnection,
+    Disconnect(String),
     PeerList(Vec<(String, [u8; 32])>),
 }
