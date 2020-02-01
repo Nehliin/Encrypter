@@ -159,6 +159,7 @@ fn main() -> Result<()> {
                         }
                     }
                     Protocol::PeerList(peers) => {
+                        info!("Received peerlist of length {}", peers.len());
                         app.chats = peers
                             .into_iter()
                             .filter(|(peer_id, _)| peer_id != &app.id)
@@ -166,6 +167,20 @@ fn main() -> Result<()> {
                                 (peer_id, Chat::new(public_key_buffer))
                             })
                             .collect::<Vec<(String, Chat)>>();
+                    }
+                    Protocol::Disconnect(id) => {
+                        info!("Received disconnect for: {}", id);
+                        if let Some(index) =
+                            app.chats.iter().position(|(peer_id, _)| peer_id == &id)
+                        {
+                            if let Some(current_index) = app.current_chat_index {
+                                if index == current_index {
+                                    app.current_chat_index = None;
+                                }
+                            }
+                            info!("Removed a chat!");
+                            app.chats.remove(index);
+                        }
                     }
                     _ => {}
                 }

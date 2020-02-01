@@ -48,46 +48,46 @@ impl PeerSet {
         }
     }
 
-    pub fn remove_by_ip(&mut self, ip: &SocketAddr) -> bool {
+    pub fn remove_by_ip(&mut self, ip: &SocketAddr) -> Option<Peer> {
         if let Some(id) = self.ip_storage.remove(ip) {
             if let Some(peer) = self.id_storage.remove(&id) {
                 if let Ok(socket_ip) = peer.get_addr() {
                     info!("Removed peer {}, with ip: {}", peer.peer_id, socket_ip);
-                    true
+                    Some(peer)
                 } else {
                     error!("The peer mapped to ip {}, has no ip stored", ip);
-                    false
+                    Some(peer)
                 }
             } else {
                 error!("IP mapping existed for ip: {}, but no peer was found", ip);
-                false
+                None
             }
         } else {
             warn!("Peer not found for ip: {}", ip);
-            false
+            None
         }
     }
 
-    pub fn remove_by_id(&mut self, id: &str) -> bool {
+    pub fn remove_by_id(&mut self, id: &str) -> Option<Peer> {
         if let Some(peer) = self.id_storage.remove(id) {
             if let Ok(socket_ip) = peer.get_addr() {
                 if let Some(socket_ip) = self.ip_storage.remove(&socket_ip) {
                     info!("Removed peer {}, with ip: {}", peer.peer_id, socket_ip);
-                    true
+                    Some(peer)
                 } else {
                     error!(
                         "ID mapping existed for id: {}, but no ip mapping was found",
                         peer.peer_id
                     );
-                    false
+                    Some(peer)
                 }
             } else {
                 error!("The peer mapped to id {}, has no ip stored", id);
-                false
+                Some(peer)
             }
         } else {
             warn!("Peer not found with id: {}", id);
-            false
+            None
         }
     }
 
