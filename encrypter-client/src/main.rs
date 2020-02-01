@@ -178,7 +178,7 @@ fn main() -> Result<()> {
                                     app.current_chat_index = None;
                                 }
                             }
-                            info!("Removed a chat!");
+                            info!("Removed chat for {}", id);
                             app.chats.remove(index);
                         }
                     }
