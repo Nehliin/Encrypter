@@ -78,14 +78,7 @@ async fn message_broker(mut receiver: Receiver<NetEvent>) -> Result<()> {
                             .iter()
                             .map(|(id, peer)| (id.clone(), peer.public_key))
                             .collect::<Vec<(String, [u8; 32])>>();
-                        for peer in peers.values() {
-                            let mut stream = &*peer.tcp_stream;
-                            stream
-                                .write_all(&bincode::serialize(&Protocol::PeerList(
-                                    connected_peers.clone(),
-                                ))?)
-                                .await?;
-                        }
+                        send_to_all_peers(Protocol::PeerList(connected_peers), &peers).await?;
                     }
                     Err(err) => {
                         error!("Error: {}", err);
@@ -94,11 +87,15 @@ async fn message_broker(mut receiver: Receiver<NetEvent>) -> Result<()> {
             }
             Protocol::Disconnect(id) => {
                 peers.remove_by_id(&id);
+                send_to_all_peers(Protocol::Disconnect(id), &peers).await?;
             }
             // TODO: Split up internal and external Protocol?
             Protocol::InternalRemoveConnection => {
                 if let Ok(socket_addr) = event.stream.peer_addr() {
-                    peers.remove_by_ip(&socket_addr);
+                    if let Some(removed_peer) = peers.remove_by_ip(&socket_addr) {
+                        send_to_all_peers(Protocol::Disconnect(removed_peer.peer_id), &peers)
+                            .await?;
+                    }
                 } else {
                     error!("No socket addr was found in net event: {:?}", event);
                 }
@@ -159,4 +156,12 @@ async fn listen_to_traffic(mut sender: Sender<NetEvent>, stream: TcpStream) -> R
             },
         }
     }
+}
+
+async fn send_to_all_peers(message: Protocol, peers: &PeerSet) -> Result<()> {
+    for peer in peers.values() {
+        let mut stream = &*peer.tcp_stream;
+        stream.write_all(&bincode::serialize(&message)?).await?;
+    }
+    Ok(())
 }
