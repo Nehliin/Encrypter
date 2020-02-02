@@ -13,4 +13,8 @@ impl Chat {
             messages: Vec::new(),
         }
     }
+
+    pub fn change_key(&mut self, public_key: [u8; 32]) {
+        self.shared_key = PRIVATE_KEY.diffie_hellman(&PublicKey::from(public_key));
+    }
 }

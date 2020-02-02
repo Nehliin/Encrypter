@@ -4,7 +4,7 @@ use encrypter_core::Result;
 use std::collections::hash_map::{Iter, Values};
 use std::collections::HashMap;
 use std::sync::Arc;
-
+#[derive(Debug)]
 pub struct Peer {
     pub peer_id: String,
     pub tcp_stream: Arc<TcpStream>,
