@@ -47,6 +47,12 @@ where
         .constraints([Constraint::Percentage(80), Constraint::Min(3)].as_ref())
         .split(layout_chunk);
 
+    let textbox_message = if app.current_chat_index.is_some() {
+        "Type message..."
+    } else {
+        "You need to select someone from the chat list before writing a message!"
+    };
+
     if let Some(chat) = app.get_current_chat() {
         List::new(chat.messages.iter().map(Text::raw))
             .block(
@@ -64,7 +70,7 @@ where
                 .title_style(get_color(highlight_state))
                 .border_style(get_color(highlight_state))
                 .borders(Borders::ALL)
-                .title("Type Message"),
+                .title(textbox_message),
         )
         .render(frame, chunks[1]);
 }
