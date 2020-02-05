@@ -3,16 +3,16 @@ use async_std::net::TcpStream;
 use encrypter_core::Result;
 use std::collections::hash_map::{Iter, Values};
 use std::collections::HashMap;
-use std::sync::Arc;
+
 #[derive(Debug)]
 pub struct Peer {
     pub peer_id: String,
-    pub tcp_stream: Arc<TcpStream>,
+    pub tcp_stream: TcpStream,
     pub public_key: [u8; 32],
 }
 
 impl Peer {
-    pub fn new(peer_id: String, tcp_stream: Arc<TcpStream>, public_key: [u8; 32]) -> Self {
+    pub fn new(peer_id: String, tcp_stream: TcpStream, public_key: [u8; 32]) -> Self {
         Peer {
             peer_id,
             tcp_stream,
@@ -21,7 +21,7 @@ impl Peer {
     }
 
     pub fn get_addr(&self) -> std::io::Result<SocketAddr> {
-        self.tcp_stream.as_ref().peer_addr()
+        self.tcp_stream.peer_addr()
     }
 }
 
