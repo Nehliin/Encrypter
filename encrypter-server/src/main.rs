@@ -72,13 +72,27 @@ async fn message_broker(mut receiver: Receiver<NetEvent>) -> Result<()> {
         match event.protocol_message {
             Protocol::NewConnection(id, public_key) => {
                 let peer = Peer::new(id, event.stream.clone(), public_key);
+                // This is sent to all peers BEFORE adding the new connection, since
+                // every peer except the recently added should receive the update is_ok
+                // is checked to make sure the peer will be able to be addded to the PeerSet
+                if peer.get_addr().is_ok() {
+                    send_to_all_peers(
+                        Protocol::NewConnection(peer.peer_id.clone(), peer.public_key),
+                        &peers,
+                    )
+                    .await;
+                }
+                let added_peer = peer.peer_id.clone();
                 match peers.insert(peer) {
                     Ok(_) => {
-                        let connected_peers = peers
-                            .iter()
-                            .map(|(id, peer)| (id.clone(), peer.public_key))
-                            .collect::<Vec<(String, [u8; 32])>>();
-                        send_to_all_peers(Protocol::PeerList(connected_peers), &peers).await?;
+                        // unwrap is safe since peer was just added
+                        send_peer_list(
+                            peers
+                                .find_by_id(&added_peer)
+                                .expect("Peer to be added to peerset"),
+                            &peers,
+                        )
+                        .await;
                     }
                     Err(err) => {
                         error!("Error: {}", err);
@@ -87,14 +101,13 @@ async fn message_broker(mut receiver: Receiver<NetEvent>) -> Result<()> {
             }
             Protocol::Disconnect(id) => {
                 peers.remove_by_id(&id);
-                send_to_all_peers(Protocol::Disconnect(id), &peers).await?;
+                send_to_all_peers(Protocol::Disconnect(id), &peers).await;
             }
             // TODO: Split up internal and external Protocol?
             Protocol::InternalRemoveConnection => {
                 if let Ok(socket_addr) = event.stream.peer_addr() {
                     if let Some(removed_peer) = peers.remove_by_ip(&socket_addr) {
-                        send_to_all_peers(Protocol::Disconnect(removed_peer.peer_id), &peers)
-                            .await?;
+                        send_to_all_peers(Protocol::Disconnect(removed_peer.peer_id), &peers).await;
                     }
                 } else {
                     error!("No socket addr was found in net event: {:?}", event);
@@ -158,10 +171,37 @@ async fn listen_to_traffic(mut sender: Sender<NetEvent>, stream: TcpStream) -> R
     }
 }
 
-async fn send_to_all_peers(message: Protocol, peers: &PeerSet) -> Result<()> {
-    for peer in peers.values() {
-        let mut stream = &*peer.tcp_stream;
-        stream.write_all(&bincode::serialize(&message)?).await?;
+async fn send_peer_list(target_peer: &Peer, peers: &PeerSet) {
+    let connected_peers = peers
+        .iter()
+        .map(|(id, peer)| (id.clone(), peer.public_key))
+        .collect::<Vec<(String, [u8; 32])>>();
+    let message = Protocol::PeerList(connected_peers);
+    if let Ok(message_buffer) = bincode::serialize(&message) {
+        let mut stream = &*target_peer.tcp_stream;
+        if let Err(err) = stream.write_all(&message_buffer).await {
+            error!(
+                "Error {}: Couldn't send message {:?}, to peer: {:?}",
+                err, message, target_peer
+            );
+        }
+    } else {
+        error!("Error: Couldn't serialize message: {:?}", message);
     }
-    Ok(())
+}
+
+async fn send_to_all_peers(message: Protocol, peers: &PeerSet) {
+    for peer in peers.values() {
+        if let Ok(message_buffer) = bincode::serialize(&message) {
+            let mut stream = &*peer.tcp_stream;
+            if let Err(err) = stream.write_all(&message_buffer).await {
+                error!(
+                    "Error {}: Couldn't send message {:?}, to peer: {:?}",
+                    err, message, peer
+                );
+            }
+        } else {
+            error!("Error: Couldn't serialize message: {:?}", message);
+        }
+    }
 }
