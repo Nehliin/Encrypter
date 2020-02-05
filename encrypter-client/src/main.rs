@@ -154,7 +154,10 @@ fn main() -> Result<()> {
                                 ));
                             }
                         } else {
-                            error!("Missing decryption key from {}", from);
+                            error!(
+                                "Missing decryption key and/or peer in chatlist, peer: {}",
+                                from
+                            );
                             todo!("Handle this error in a better way");
                         }
                     }
@@ -182,7 +185,22 @@ fn main() -> Result<()> {
                             app.chats.remove(index);
                         }
                     }
-                    _ => {}
+                    Protocol::NewConnection(id, public_key) => {
+                        info!("Received connection to new peer: {}", id);
+                        if let Some((_, chat)) =
+                            app.chats.iter_mut().find(|(old_id, _)| old_id == &id)
+                        {
+                            warn!("Peer already in chat list, updating public_key");
+                            chat.change_key(public_key);
+                        } else {
+                            info!("Adding peer {} to chat list", id);
+                            app.chats.push((id, Chat::new(public_key)));
+                        }
+                    }
+                    unknown_message => warn!(
+                        "Received a message client can't handle: {:?}",
+                        unknown_message
+                    ),
                 }
             }
         }
