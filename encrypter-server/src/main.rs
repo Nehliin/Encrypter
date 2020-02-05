@@ -189,19 +189,25 @@ async fn send_peer_list(target_peer: &Peer, peers: &PeerSet) {
         error!("Error: Couldn't serialize message: {:?}", message);
     }
 }
-
+// TODO: FuturesUnordered datastructure might be more efficent than join_all
 async fn send_to_all_peers(message: Protocol, peers: &PeerSet) {
-    for peer in peers.values() {
-        if let Ok(message_buffer) = bincode::serialize(&message) {
-            let mut stream = &*peer.tcp_stream;
-            if let Err(err) = stream.write_all(&message_buffer).await {
-                error!(
-                    "Error {}: Couldn't send message {:?}, to peer: {:?}",
-                    err, message, peer
-                );
-            }
-        } else {
-            error!("Error: Couldn't serialize message: {:?}", message);
-        }
+    if let Ok(message) = bincode::serialize(&message) {
+        let handles = peers.values().map(|peer| {
+            let msg = message.clone();
+            let socket = peer.tcp_stream.clone();
+            task::spawn(async move {
+                let mut socket = &*socket;
+                if let Err(err) = socket.write_all(&msg).await {
+                    error!(
+                        "Error {}: Couldn't send peer list to peer with ip: {:?}",
+                        err,
+                        socket.peer_addr()
+                    );
+                }
+            })
+        });
+        futures::future::join_all(handles).await;
+    } else {
+        error!("Error: Couldn't serialize message: {:?}", message);
     }
 }
