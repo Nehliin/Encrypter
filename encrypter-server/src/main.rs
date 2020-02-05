@@ -13,7 +13,6 @@ use encrypter_core::MESSAGE_PACKET_SIZE;
 use futures::{channel::mpsc, FutureExt, SinkExt, StreamExt};
 use simplelog::*;
 use std::fs::File;
-use std::sync::Arc;
 type Receiver<T> = mpsc::UnboundedReceiver<T>;
 type Sender<T> = mpsc::UnboundedSender<T>;
 
@@ -23,7 +22,7 @@ use peer::PeerSet;
 #[derive(Debug)]
 struct NetEvent {
     pub protocol_message: Protocol,
-    pub stream: Arc<TcpStream>,
+    pub stream: TcpStream,
 }
 
 fn main() -> Result<()> {
@@ -116,7 +115,7 @@ async fn message_broker(mut receiver: Receiver<NetEvent>) -> Result<()> {
             Protocol::Message(encrypted_message) => {
                 let (_from, to) = encrypted_message.get_info();
                 if let Some(receiving_participant) = peers.find_by_id(to) {
-                    let mut receiveing_stream = &*receiving_participant.tcp_stream;
+                    let mut receiveing_stream = &receiving_participant.tcp_stream;
                     receiveing_stream
                         .write_all(&bincode::serialize(&Protocol::Message(encrypted_message))?)
                         .await?;
@@ -133,10 +132,10 @@ async fn message_broker(mut receiver: Receiver<NetEvent>) -> Result<()> {
 // This creates a shared pointer to each TcpConnection and sends the pointer together with
 // each message to the message broker who handles the actual propagation of messages.
 async fn listen_to_traffic(mut sender: Sender<NetEvent>, stream: TcpStream) -> Result<()> {
-    // Wrap the connection stream in Arc to be able to send it between tasks
+    // The TcpStream doesn't require an Arc and is clonable since async-std internally uses an Arc
+    // for the socket file descriptior.
     // This listens on incoming traffic but it's also needed when sending out messages
-    let stream = Arc::new(stream);
-    let mut reader = BufReader::new(&*stream);
+    let mut reader = BufReader::new(&stream);
     let mut buffer = vec![0 as u8; MESSAGE_PACKET_SIZE];
     loop {
         match reader.read(&mut buffer).await {
@@ -178,7 +177,7 @@ async fn send_peer_list(target_peer: &Peer, peers: &PeerSet) {
         .collect::<Vec<(String, [u8; 32])>>();
     let message = Protocol::PeerList(connected_peers);
     if let Ok(message_buffer) = bincode::serialize(&message) {
-        let mut stream = &*target_peer.tcp_stream;
+        let mut stream = &target_peer.tcp_stream;
         if let Err(err) = stream.write_all(&message_buffer).await {
             error!(
                 "Error {}: Couldn't send message {:?}, to peer: {:?}",
@@ -196,7 +195,7 @@ async fn send_to_all_peers(message: Protocol, peers: &PeerSet) {
             let msg = message.clone();
             let socket = peer.tcp_stream.clone();
             task::spawn(async move {
-                let mut socket = &*socket;
+                let mut socket = &socket;
                 if let Err(err) = socket.write_all(&msg).await {
                     error!(
                         "Error {}: Couldn't send peer list to peer with ip: {:?}",

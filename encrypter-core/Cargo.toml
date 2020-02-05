@@ -5,7 +5,7 @@ authors = ["Nehliin <o-nehlin@hotmail.com>"]
 edition = "2018"
 
 [dependencies]
-bincode = "1.2.1"
+bincode = "1.2"
 serde = { version = "1.0", features = ["derive"] }
-x25519-dalek = "0.6.0"
-aes-soft = "0.3.3" 
+x25519-dalek = "0.6"
+aes-soft = "0.3" 
