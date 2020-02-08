@@ -22,6 +22,8 @@ mod events;
 mod network;
 mod ui;
 
+use ui::command_line::CommandLine;
+
 const DEFAULT_ROUTE: Route = Route {
     id: RouteId::StartScreen,
     active_block: ActiveBlock::Id,
@@ -37,6 +39,7 @@ pub struct App {
     input_cursor_pos: u16,
     cursor_vertical_offset: u16,
     message_draft: String,
+    command_line: CommandLine,
     connection: Option<network::ServerConnection>,
 }
 
@@ -49,6 +52,7 @@ impl App {
             connection: None,
             current_chat_index: None,
             message_draft: String::new(),
+            command_line: CommandLine::new(),
             chats: Vec::new(),
             input_cursor_pos: 0,
             server_addr: String::from("127.0.0.1:1337"),
@@ -112,6 +116,7 @@ pub enum ActiveBlock {
     Id,
     ChatWindow,
     ChatList,
+    CommandLine,
 }
 
 #[derive(Debug)]
@@ -158,11 +163,14 @@ fn main() -> Result<()> {
                                 "Missing decryption key and/or peer in chatlist, peer: {}",
                                 from
                             );
+                            app.command_line
+                                .show_error(format!("Received message from unknown peer {}", from));
                             todo!("Handle this error in a better way");
                         }
                     }
                     Protocol::PeerList(peers) => {
                         info!("Received peerlist of length {}", peers.len());
+                        app.command_line.show_info_message("Received peerlist");
                         app.chats = peers
                             .into_iter()
                             .filter(|(peer_id, _)| peer_id != &app.id)
@@ -172,7 +180,9 @@ fn main() -> Result<()> {
                             .collect::<Vec<(String, Chat)>>();
                     }
                     Protocol::Disconnect(id) => {
-                        info!("Received disconnect for: {}", id);
+                        let log = format!("Received disconnect for: {}", id);
+                        info!("{}", log);
+                        app.command_line.show_info_message(log);
                         if let Some(index) =
                             app.chats.iter().position(|(peer_id, _)| peer_id == &id)
                         {
@@ -187,6 +197,8 @@ fn main() -> Result<()> {
                     }
                     Protocol::NewConnection(id, public_key) => {
                         info!("Received connection to new peer: {}", id);
+                        app.command_line
+                            .show_info_message(format!("New connection to: {}", id));
                         if let Some((_, chat)) =
                             app.chats.iter_mut().find(|(old_id, _)| old_id == &id)
                         {
@@ -197,10 +209,17 @@ fn main() -> Result<()> {
                             app.chats.push((id, Chat::new(public_key)));
                         }
                     }
-                    unknown_message => warn!(
-                        "Received a message client can't handle: {:?}",
-                        unknown_message
-                    ),
+                    Protocol::ConnectionLost => {
+                        app.command_line.show_error("Lost server connection!")
+                    }
+                    unknown_message => {
+                        app.command_line
+                            .show_warning("Received a message client can't handle");
+                        warn!(
+                            "Received a message client can't handle: {:?}",
+                            unknown_message
+                        )
+                    }
                 }
             }
         }
@@ -210,7 +229,7 @@ fn main() -> Result<()> {
                     ui::draw_start_screen(&mut f, &app);
                 }
                 RouteId::Chat => {
-                    ui::draw_routes(&mut f, &mut app);
+                    ui::draw_main_screen(&mut f, &mut app);
                 }
             })
             .unwrap();

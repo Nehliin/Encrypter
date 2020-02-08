@@ -58,6 +58,7 @@ pub enum Protocol {
     Message(EncryptedMessage),
     NewConnection(String, [u8; 32]),
     InternalRemoveConnection,
+    ConnectionLost,
     Disconnect(String),
     PeerList(Vec<(String, [u8; 32])>),
 }

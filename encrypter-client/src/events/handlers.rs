@@ -2,6 +2,7 @@ use crate::{network::ServerConnection, ActiveBlock, App, Route, RouteId};
 
 use encrypter_core::{EncryptedMessage, Message, Protocol};
 
+use crate::ui::StatefulWidget;
 use termion::event::Key;
 
 /*
@@ -12,6 +13,10 @@ Input struktur:
 typ som handle right och handle left
 */
 pub fn handle_block_events(input: Key, app: &mut App) {
+    if input == Key::Esc {
+        app.set_current_route_state(Some(ActiveBlock::Empty), None);
+        return;
+    }
     match app.get_current_route().active_block {
         ActiveBlock::Id => {
             id_handler(input, app);
@@ -25,6 +30,9 @@ pub fn handle_block_events(input: Key, app: &mut App) {
         ActiveBlock::ChatWindow => {
             chat_window_handler(input, app);
         }
+        ActiveBlock::CommandLine => {
+            app.command_line.handle_event(input);
+        }
         ActiveBlock::Empty => match input {
             Key::Char('\n') => {
                 app.set_current_route_state(
@@ -37,6 +45,10 @@ pub fn handle_block_events(input: Key, app: &mut App) {
             }
             Key::Left => {
                 handle_left_event(app);
+            }
+            Key::Char(':') => {
+                app.set_current_route_state(Some(ActiveBlock::CommandLine), None);
+                handle_block_events(input, app);
             }
             _ => {}
         },
