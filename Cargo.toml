@@ -1,2 +1,7 @@
 [workspace]
 members = ["encrypter-client", "encrypter-server", "encrypter-core"]
+
+[profile.release]
+opt-level = 3
+codegen-units = 1
+lto = "fat"

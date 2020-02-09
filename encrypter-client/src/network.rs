@@ -50,20 +50,21 @@ impl ServerConnection {
                 match reader.read(&mut buffer) {
                     Ok(0) | Err(_) => {
                         error!("Server connection lost!");
+                        sender
+                            .send(Protocol::ConnectionLost)
+                            .expect("Failed to send connection lost message");
                         break;
                     }
-                    Ok(n) => {
-                        match bincode::deserialize::<Protocol>(&buffer[..n]) {
-                            Ok(message) => {
-                                sender
-                                    .send(message) // TODO: this as well
-                                    .expect("Failed to sennd message from tcp listener thread");
-                            }
-                            Err(err) => {
-                                error!("Could not parse message from incomming traffic {}", err);
-                            }
+                    Ok(n) => match bincode::deserialize::<Protocol>(&buffer[..n]) {
+                        Ok(message) => {
+                            sender
+                                .send(message)
+                                .expect("Failed to sennd message from tcp listener thread");
                         }
-                    }
+                        Err(err) => {
+                            error!("Could not parse message from incomming traffic {}", err);
+                        }
+                    },
                 }
             }
         });

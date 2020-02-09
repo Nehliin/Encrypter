@@ -1,10 +1,13 @@
 use crate::{ActiveBlock, App, RouteId};
 
+use termion::event::Key;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, Paragraph, SelectableList, Text, Widget};
 use tui::Frame;
+
+pub mod command_line;
 
 pub fn get_color((is_active, is_hovered): (bool, bool)) -> Style {
     match (is_active, is_hovered) {
@@ -14,14 +17,34 @@ pub fn get_color((is_active, is_hovered): (bool, bool)) -> Style {
     }
 }
 
-pub fn draw_routes<B>(frame: &mut Frame<B>, app: &mut App)
+pub trait StatefulWidget {
+    fn draw<B>(&self, frame: &mut Frame<B>, layout_chunk: Rect)
+    where
+        B: Backend;
+    fn handle_event(&mut self, input_key: Key);
+}
+
+pub fn draw_main_screen<B>(frame: &mut Frame<B>, app: &mut App)
+where
+    B: Backend,
+{
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(0)
+        .constraints([Constraint::Percentage(95), Constraint::Max(2)].as_ref())
+        .split(frame.size());
+    draw_chat_content(frame, app, chunks[0]);
+    app.command_line.draw(frame, chunks[1]);
+}
+
+pub fn draw_chat_content<B>(frame: &mut Frame<B>, app: &mut App, layout_chunk: Rect)
 where
     B: Backend,
 {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(20), Constraint::Percentage(80)].as_ref())
-        .split(frame.size());
+        .split(layout_chunk);
 
     draw_chat_list(frame, app, chunks[0]);
 
@@ -44,7 +67,7 @@ where
     );
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(80), Constraint::Min(3)].as_ref())
+        .constraints([Constraint::Percentage(90), Constraint::Max(3)].as_ref())
         .split(layout_chunk);
 
     let textbox_message = if app.current_chat_index.is_some() {
