@@ -1,8 +1,8 @@
 use crate::network::ServerConnection;
 use crate::ui::components::command_line::CommandLine;
+use crate::ui::components::Component;
 use crate::ui::containers::chat_container::ChatContainer;
-use crate::ui::Component;
-use crate::ui::Container;
+use crate::ui::containers::Container;
 use termion::event::Key;
 use tui::backend::Backend;
 

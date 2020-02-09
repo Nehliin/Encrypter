@@ -4,7 +4,7 @@ extern crate log;
 use simplelog::*;
 
 use crate::events::{Event, Events};
-use crate::ui::Container;
+use crate::ui::containers::Container;
 use encrypter_core::Result;
 use std::fs::File;
 use std::io::Write;

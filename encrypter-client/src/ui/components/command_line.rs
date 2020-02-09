@@ -1,5 +1,5 @@
+use crate::ui::components::Component;
 use crate::ui::containers::main_container::MainState;
-use crate::ui::Component;
 use termion::event::Key;
 use tui::backend::Backend;
 use tui::layout::Rect;
@@ -90,7 +90,7 @@ impl CommandLine {
 }
 
 impl Component<MainState> for CommandLine {
-    fn draw<B: Backend>(&self, frame: &mut Frame<B>, layout_chunk: Rect, state: &MainState) {
+    fn draw<B: Backend>(&self, frame: &mut Frame<B>, layout_chunk: Rect, _state: &MainState) {
         let (text_style, block_style) = self.get_style();
         let text = Text::styled(&self.content, text_style);
         Paragraph::new([text].iter())
@@ -99,7 +99,7 @@ impl Component<MainState> for CommandLine {
             .render(frame, layout_chunk);
     }
 
-    fn handle_event(&mut self, input_key: Key, state: &mut MainState) {
+    fn handle_event(&mut self, input_key: Key, _state: &mut MainState) {
         self.display_mode = DisplayMode::Input;
         match input_key {
             Key::Char(':') => {

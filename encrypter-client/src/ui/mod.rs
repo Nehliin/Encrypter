@@ -18,25 +18,6 @@ pub fn get_color((is_active, is_hovered): (bool, bool)) -> Style {
     }
 }
 
-pub trait Container {
-    fn update(&mut self);
-    fn draw<B: Backend>(&self, frame: &mut Frame<B>, layout_chunk: Rect);
-    fn handle_event(&mut self, input_key: Key);
-}
-
-pub trait Component<S> {
-    fn draw<B: Backend>(&self, frame: &mut Frame<B>, layout_chunk: Rect, state: &S);
-
-    fn handle_event(&mut self, input_key: Key, state: &mut S);
-
-    fn set_active(&mut self, active: bool);
-
-    fn set_hovered(&mut self, hoverd: bool);
-
-    fn is_active(&self) -> bool;
-    fn is_hovered(&self) -> bool;
-}
-
 pub fn draw_start_screen<B>(frame: &mut Frame<B>, app: &App)
 where
     B: Backend,

@@ -1,6 +1,6 @@
+use crate::ui::components::Component;
 use crate::ui::containers::chat_container::ChatState;
 use crate::ui::get_color;
-use crate::ui::Component;
 use termion::event::Key;
 use tui::backend::Backend;
 use tui::layout::Rect;
