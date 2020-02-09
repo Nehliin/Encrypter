@@ -1,4 +1,5 @@
-use crate::ui::StatefulWidget;
+use crate::ui::components::Component;
+use crate::ui::containers::main_container::MainState;
 use termion::event::Key;
 use tui::backend::Backend;
 use tui::layout::Rect;
@@ -19,6 +20,8 @@ enum DisplayMode {
 pub struct CommandLine {
     content: String,
     display_mode: DisplayMode,
+    is_active: bool,
+    is_hovered: bool,
 }
 
 impl CommandLine {
@@ -26,6 +29,8 @@ impl CommandLine {
         CommandLine {
             content: String::from("Commandline"),
             display_mode: DisplayMode::Default,
+            is_active: false,
+            is_hovered: false,
         }
     }
 
@@ -84,11 +89,8 @@ impl CommandLine {
     }
 }
 
-impl StatefulWidget for CommandLine {
-    fn draw<B>(&self, frame: &mut Frame<B>, layout_chunk: Rect)
-    where
-        B: Backend,
-    {
+impl Component<MainState> for CommandLine {
+    fn draw<B: Backend>(&self, frame: &mut Frame<B>, layout_chunk: Rect, _state: &MainState) {
         let (text_style, block_style) = self.get_style();
         let text = Text::styled(&self.content, text_style);
         Paragraph::new([text].iter())
@@ -97,7 +99,7 @@ impl StatefulWidget for CommandLine {
             .render(frame, layout_chunk);
     }
 
-    fn handle_event(&mut self, input_key: Key) {
+    fn handle_event(&mut self, input_key: Key, _state: &mut MainState) {
         self.display_mode = DisplayMode::Input;
         match input_key {
             Key::Char(':') => {
@@ -119,5 +121,17 @@ impl StatefulWidget for CommandLine {
             }
             _ => {}
         }
+    }
+    fn is_hovered(&self) -> bool {
+        self.is_hovered
+    }
+    fn set_hovered(&mut self, hovered: bool) {
+        self.is_hovered = hovered;
+    }
+    fn set_active(&mut self, active: bool) {
+        self.is_active = active;
+    }
+    fn is_active(&self) -> bool {
+        self.is_active
     }
 }

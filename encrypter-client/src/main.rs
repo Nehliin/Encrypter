@@ -4,8 +4,7 @@ extern crate log;
 use simplelog::*;
 
 use crate::events::{Event, Events};
-use chat::Chat;
-use encrypter_core::Protocol;
+use crate::ui::containers::Container;
 use encrypter_core::Result;
 use std::fs::File;
 use std::io::Write;
@@ -17,115 +16,32 @@ use termion::screen::AlternateScreen;
 use tui::backend::TermionBackend;
 use tui::Terminal;
 
+use crate::ui::containers::main_container::MainContainer;
+
 mod chat;
 mod events;
 mod network;
 mod ui;
 
-use ui::command_line::CommandLine;
-
-const DEFAULT_ROUTE: Route = Route {
-    id: RouteId::StartScreen,
-    active_block: ActiveBlock::Id,
-    hovered_block: ActiveBlock::Id,
-};
-
 pub struct App {
     id: String,
-    server_addr: String,
-    current_chat_index: Option<usize>,
-    chats: Vec<(String, Chat)>,
-    navigation_stack: Vec<Route>,
     input_cursor_pos: u16,
     cursor_vertical_offset: u16,
-    message_draft: String,
-    command_line: CommandLine,
+    main_container: Option<MainContainer>,
     connection: Option<network::ServerConnection>,
 }
 
 impl App {
     fn new() -> Self {
         App {
-            navigation_stack: vec![DEFAULT_ROUTE],
             cursor_vertical_offset: 4,
             id: String::new(),
-            connection: None,
-            current_chat_index: None,
-            message_draft: String::new(),
-            command_line: CommandLine::new(),
-            chats: Vec::new(),
             input_cursor_pos: 0,
-            server_addr: String::from("127.0.0.1:1337"),
-        }
-    }
-
-    fn get_current_route(&self) -> &Route {
-        match self.navigation_stack.last() {
-            Some(route) => route,
-            None => &DEFAULT_ROUTE,
-        }
-    }
-
-    pub(crate) fn get_current_chat(&mut self) -> Option<&mut Chat> {
-        if let Some(index) = self.current_chat_index {
-            Some(&mut self.chats[index].1)
-        } else {
-            None
-        }
-    }
-
-    pub(crate) fn get_chat_for(&mut self, contact: &str) -> Option<&mut Chat> {
-        self.chats
-            .iter_mut()
-            .find(|(user, _chat)| user == contact)
-            .map(|(_, chat)| chat)
-    }
-
-    fn get_current_route_mut(&mut self) -> &mut Route {
-        self.navigation_stack.last_mut().unwrap()
-    }
-
-    pub fn push_route(&mut self, route: Route) {
-        self.navigation_stack.push(route);
-    }
-
-    pub fn set_current_route_state(
-        &mut self,
-        active_block: Option<ActiveBlock>,
-        hovered_block: Option<ActiveBlock>,
-    ) {
-        let mut current_route = self.get_current_route_mut();
-        if let Some(active_block) = active_block {
-            current_route.active_block = active_block;
-        }
-        if let Some(hovered_block) = hovered_block {
-            current_route.hovered_block = hovered_block;
+            main_container: None,
+            connection: None,
         }
     }
 }
-
-#[derive(Clone, PartialEq, Debug)]
-pub enum RouteId {
-    StartScreen,
-    Chat,
-}
-
-#[derive(Clone, PartialEq, Debug)]
-pub enum ActiveBlock {
-    Empty,
-    Id,
-    ChatWindow,
-    ChatList,
-    CommandLine,
-}
-
-#[derive(Debug)]
-pub struct Route {
-    pub id: RouteId,
-    pub active_block: ActiveBlock,
-    pub hovered_block: ActiveBlock,
-}
-
 fn main() -> Result<()> {
     let _ = WriteLogger::init(
         LevelFilter::Info,
@@ -144,97 +60,22 @@ fn main() -> Result<()> {
 
     let mut app = App::new();
     loop {
-        if let Some(ref mut connection) = app.connection {
-            if let Some(protocol_message) = connection.step()? {
-                match protocol_message {
-                    Protocol::Message(encrypted_incoming) => {
-                        let (from, _to) = encrypted_incoming.get_info();
-                        if let Some(chat) = app.get_chat_for(from) {
-                            let incoming = encrypted_incoming.decrypt_message(&chat.shared_key);
-                            if let Some(chat) = app.get_chat_for(&incoming.from) {
-                                chat.messages.push(format!(
-                                    "{}: {}",
-                                    incoming.from,
-                                    String::from_utf8_lossy(&incoming.content)
-                                ));
-                            }
-                        } else {
-                            error!(
-                                "Missing decryption key and/or peer in chatlist, peer: {}",
-                                from
-                            );
-                            app.command_line
-                                .show_error(format!("Received message from unknown peer {}", from));
-                            todo!("Handle this error in a better way");
-                        }
-                    }
-                    Protocol::PeerList(peers) => {
-                        info!("Received peerlist of length {}", peers.len());
-                        app.command_line.show_info_message("Received peerlist");
-                        app.chats = peers
-                            .into_iter()
-                            .filter(|(peer_id, _)| peer_id != &app.id)
-                            .map(|(peer_id, public_key_buffer)| {
-                                (peer_id, Chat::new(public_key_buffer))
-                            })
-                            .collect::<Vec<(String, Chat)>>();
-                    }
-                    Protocol::Disconnect(id) => {
-                        let log = format!("Received disconnect for: {}", id);
-                        info!("{}", log);
-                        app.command_line.show_info_message(log);
-                        if let Some(index) =
-                            app.chats.iter().position(|(peer_id, _)| peer_id == &id)
-                        {
-                            if let Some(current_index) = app.current_chat_index {
-                                if index == current_index {
-                                    app.current_chat_index = None;
-                                }
-                            }
-                            info!("Removed chat for {}", id);
-                            app.chats.remove(index);
-                        }
-                    }
-                    Protocol::NewConnection(id, public_key) => {
-                        info!("Received connection to new peer: {}", id);
-                        app.command_line
-                            .show_info_message(format!("New connection to: {}", id));
-                        if let Some((_, chat)) =
-                            app.chats.iter_mut().find(|(old_id, _)| old_id == &id)
-                        {
-                            warn!("Peer already in chat list, updating public_key");
-                            chat.change_key(public_key);
-                        } else {
-                            info!("Adding peer {} to chat list", id);
-                            app.chats.push((id, Chat::new(public_key)));
-                        }
-                    }
-                    Protocol::ConnectionLost => {
-                        app.command_line.show_error("Lost server connection!")
-                    }
-                    unknown_message => {
-                        app.command_line
-                            .show_warning("Received a message client can't handle");
-                        warn!(
-                            "Received a message client can't handle: {:?}",
-                            unknown_message
-                        )
-                    }
-                }
-            }
+        if app.connection.is_some() {
+            let connection = app.connection.take();
+            app.main_container = Some(MainContainer::new(app.id.clone(), connection.unwrap()));
         }
         terminal
-            .draw(|mut f| match app.get_current_route().id {
-                RouteId::StartScreen => {
+            .draw(|mut f| {
+                if let Some(main_container) = app.main_container.as_mut() {
+                    main_container.update();
+                    let rect = f.size();
+                    main_container.draw(&mut f, rect);
+                } else {
                     ui::draw_start_screen(&mut f, &app);
-                }
-                RouteId::Chat => {
-                    ui::draw_main_screen(&mut f, &mut app);
                 }
             })
             .unwrap();
-
-        if app.get_current_route().id == RouteId::StartScreen {
+        if app.main_container.is_none() {
             terminal.show_cursor().unwrap();
         } else {
             terminal.hide_cursor().unwrap();
@@ -256,7 +97,11 @@ fn main() -> Result<()> {
                     break;
                 }
                 _ => {
-                    events::handlers::handle_block_events(input, &mut app);
+                    if let Some(container) = app.main_container.as_mut() {
+                        container.handle_event(input);
+                    } else {
+                        events::handlers::id_handler(input, &mut app);
+                    }
                 }
             }
         }
